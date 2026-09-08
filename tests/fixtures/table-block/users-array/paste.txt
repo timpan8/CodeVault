@@ -1,0 +1,6 @@
+$Users = @(
+    @{ Name = 'Anna Andersson'; UPN = 'anna.andersson@contoso.com'; Department = 'IT' },
+    @{ Name = 'Erik Eriksson'; UPN = 'erik.eriksson@contoso.com'; Department = 'HR' },
+    @{ Name = 'Lisa Larsson'; UPN = 'lisa.larsson@contoso.com'; Department = 'Ekonomi' }
+)
+foreach ($u in $Users) { New-MgUser -DisplayName $u.Name -UserPrincipalName $u.UPN }

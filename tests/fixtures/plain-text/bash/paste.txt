@@ -1,0 +1,2 @@
+export USER=svc-example01
+export PASS="Ex@mple-Passw0rd-1"

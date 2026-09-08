@@ -1,0 +1,9 @@
+[
+ {
+  "id": "root",
+  "name": "PROJECT_ROOT",
+  "kind": "path",
+  "example": "C:\\Example\\Project01",
+  "real": "C:\\Temp\\AdSync"
+ }
+]

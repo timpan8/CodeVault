@@ -1,0 +1,7 @@
+$csv = @'
+Name;UPN;Department
+Anna Andersson;anna.andersson@contoso.com;IT
+Erik Eriksson;erik.eriksson@contoso.com;HR
+Lisa Larsson;lisa.larsson@contoso.com;Ekonomi
+'@
+$Users = $csv | ConvertFrom-Csv -Delimiter ';'

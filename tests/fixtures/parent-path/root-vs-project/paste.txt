@@ -1,0 +1,2 @@
+Get-ChildItem 'C:\Example' -Recurse | Remove-Item -Force
+Export-Csv 'C:\Example\Project01\x.csv'

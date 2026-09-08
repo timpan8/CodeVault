@@ -1,0 +1,2 @@
+New-ADUser -Name $n -Credential (Get-Cred 'svc-example01')
+Remove-ADGroupMember -Credential (Get-Cred 'svc-example01')

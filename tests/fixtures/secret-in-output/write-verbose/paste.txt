@@ -1,0 +1,2 @@
+$Password = 'Ex@mple-Passw0rd-1'
+Write-Verbose "Authenticating as svc-example01 / Ex@mple-Passw0rd-1"

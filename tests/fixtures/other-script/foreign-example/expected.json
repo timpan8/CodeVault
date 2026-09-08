@@ -1,0 +1,17 @@
+{
+ "slots": [
+  {
+   "fieldId": "osrv",
+   "line": 1,
+   "status": "candidate",
+   "warnings": [
+    "other-script"
+   ]
+  },
+  {
+   "fieldId": "user",
+   "line": 1,
+   "status": "auto"
+  }
+ ]
+}

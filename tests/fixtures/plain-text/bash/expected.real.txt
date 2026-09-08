@@ -1,0 +1,2 @@
+export USER=svc-adsync
+export PASS="Sommar2024!"

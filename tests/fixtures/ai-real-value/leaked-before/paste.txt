@@ -1,0 +1,2 @@
+$Username = 'svc-adsync'
+$Password = 'Ex@mple-Passw0rd-1'

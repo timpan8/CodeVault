@@ -1,0 +1,6 @@
+$cfg = @{
+    User = 'svc-example01'
+    Password = 'Ex@mple-Passw0rd-1'
+    Server = 'SRV-EXAMPLE01.corp.example'
+}
+Connect-Thing @cfg

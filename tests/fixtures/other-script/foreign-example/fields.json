@@ -1,0 +1,21 @@
+[
+ {
+  "id": "user",
+  "name": "SVC_USER",
+  "kind": "username",
+  "example": "svc-example01",
+  "nameAnchors": [
+   "username",
+   "user"
+  ],
+  "real": "svc-adsync"
+ },
+ {
+  "id": "osrv",
+  "name": "OTHER_DC",
+  "kind": "server",
+  "example": "SRV-EXAMPLE02.corp.example",
+  "real": "dc09.other.se",
+  "other": true
+ }
+]

@@ -1,0 +1,30 @@
+{
+ "slots": [
+  {
+   "fieldId": "user",
+   "line": 1,
+   "status": "auto",
+   "warnings": [
+    "exposed"
+   ]
+  },
+  {
+   "fieldId": "pw",
+   "line": 2,
+   "status": "auto",
+   "warnings": [
+    "exposed"
+   ]
+  }
+ ],
+ "unknown": [
+  "dc02.corp.contoso.se"
+ ],
+ "flags": {
+  "realValuesFound": [
+   "user",
+   "pw"
+  ],
+  "directionWarning": false
+ }
+}

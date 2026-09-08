@@ -1,0 +1,1 @@
+Copy-Item -Path '\\SRV-EXAMPLE01\it$\file.txt' -Destination 'C:\Example\Project01\'

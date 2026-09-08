@@ -1,0 +1,18 @@
+[
+ {
+  "id": "srv",
+  "name": "DC",
+  "kind": "server",
+  "example": "SRV-EXAMPLE01.corp.example",
+  "nameAnchors": [
+   "server"
+  ],
+  "real": "dc01.corp.contoso.se",
+  "aliases": [
+   {
+    "value": "localhost",
+    "anchorOnly": true
+   }
+  ]
+ }
+]

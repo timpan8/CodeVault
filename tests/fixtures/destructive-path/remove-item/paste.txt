@@ -1,0 +1,2 @@
+Remove-Item -Path 'C:\Example\Project01\tmp' -Recurse -Force
+New-Item -ItemType Directory -Path 'C:\Example\Project01\tmp' -Force | Out-Null

@@ -1,0 +1,22 @@
+{
+ "slots": [
+  {
+   "fieldId": "pw",
+   "line": 1,
+   "status": "auto"
+  },
+  {
+   "fieldId": "user",
+   "line": 2,
+   "status": "auto"
+  },
+  {
+   "fieldId": "pw",
+   "line": 2,
+   "status": "confirm",
+   "warnings": [
+    "secret-in-output"
+   ]
+  }
+ ]
+}

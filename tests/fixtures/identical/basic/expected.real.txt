@@ -1,0 +1,4 @@
+$Username = 'svc-adsync'
+$Password = 'Sommar2024!'
+Connect-Thing -Server 'dc01.corp.contoso.se' -Credential (New-Object PSCredential($Username, (ConvertTo-SecureString $Password -AsPlainText -Force)))
+Export-Csv -Path 'C:\Temp\AdSync\users.csv' -NoTypeInformation

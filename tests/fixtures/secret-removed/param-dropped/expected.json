@@ -1,0 +1,12 @@
+{
+ "slots": [
+  {
+   "fieldId": "user",
+   "line": 1,
+   "status": "auto"
+  }
+ ],
+ "missing": [
+  "pw"
+ ]
+}

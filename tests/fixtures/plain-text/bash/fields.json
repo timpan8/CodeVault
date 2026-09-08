@@ -1,0 +1,23 @@
+[
+ {
+  "id": "user",
+  "name": "SVC_USER",
+  "kind": "username",
+  "example": "svc-example01",
+  "nameAnchors": [
+   "username",
+   "user"
+  ],
+  "real": "svc-adsync"
+ },
+ {
+  "id": "pw",
+  "name": "SVC_PW",
+  "kind": "password",
+  "example": "Ex@mple-Passw0rd-1",
+  "nameAnchors": [
+   "password"
+  ],
+  "real": "Sommar2024!"
+ }
+]

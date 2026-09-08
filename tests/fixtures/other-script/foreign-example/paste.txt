@@ -1,0 +1,1 @@
+Connect-Thing -Server 'SRV-EXAMPLE02.corp.example' -UserName 'svc-example01'

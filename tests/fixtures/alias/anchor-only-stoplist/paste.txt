@@ -1,0 +1,2 @@
+Invoke-Command -ComputerName localhost { Restart-Service X }
+$Server = 'localhost'

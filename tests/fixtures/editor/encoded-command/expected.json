@@ -1,0 +1,15 @@
+{
+ "slots": [
+  {
+   "fieldId": "user",
+   "line": 2,
+   "status": "auto",
+   "warnings": [
+    "exposed"
+   ]
+  }
+ ],
+ "unknown": [
+  "powershell.exe -NoProfile -EncodedCommand JABwACAAPQAgACcAUwBvAG0AbQBhAHIAMgAwADIANAAhACcA"
+ ]
+}
