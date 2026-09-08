@@ -1,0 +1,23 @@
+{
+ "slots": [
+  {
+   "fieldId": "user",
+   "line": 1,
+   "status": "auto",
+   "warnings": [
+    "exposed"
+   ]
+  },
+  {
+   "fieldId": "pw",
+   "line": 2,
+   "status": "auto"
+  }
+ ],
+ "flags": {
+  "realValuesFound": [
+   "user"
+  ],
+  "directionWarning": true
+ }
+}

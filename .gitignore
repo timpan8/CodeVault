@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+release/
+*.enc
+*.local
+.DS_Store
+test-results/
+playwright-report/

@@ -1,0 +1,2 @@
+Connect-MgGraph -ClientSecret 'abc123XYZ!def' -TenantId '3f2a9b1c-1234-4abc-9def-123456789abc'
+Get-MgUser -UserId 'svc-example01'

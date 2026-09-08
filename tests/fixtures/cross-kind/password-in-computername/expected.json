@@ -1,0 +1,12 @@
+{
+ "slots": [
+  {
+   "fieldId": "pw",
+   "line": 1,
+   "status": "confirm",
+   "warnings": [
+    "cross-kind"
+   ]
+  }
+ ]
+}

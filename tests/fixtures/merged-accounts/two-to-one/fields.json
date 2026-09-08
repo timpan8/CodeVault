@@ -1,0 +1,23 @@
+[
+ {
+  "id": "user",
+  "name": "SVC_USER",
+  "kind": "username",
+  "example": "svc-example01",
+  "nameAnchors": [
+   "username",
+   "user"
+  ],
+  "real": "svc-adsync"
+ },
+ {
+  "id": "admin",
+  "name": "ADMIN_USER",
+  "kind": "username",
+  "example": "svc-example02",
+  "nameAnchors": [
+   "adminuser"
+  ],
+  "real": "adm-tim"
+ }
+]

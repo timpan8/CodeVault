@@ -1,0 +1,4 @@
+$Username = '⟦f:user|sq⟧'
+$Password = '⟦f:pw|sq⟧'
+Connect-Thing -Server '⟦f:srv|sq⟧' -Credential (New-Object PSCredential($Username, (ConvertTo-SecureString $Password -AsPlainText -Force)))
+Export-Csv -Path '⟦f:root|sq⟧\users.csv' -NoTypeInformation

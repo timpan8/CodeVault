@@ -1,0 +1,8 @@
+function Export-Users {
+    Get-ADUser -Filter * | Export-Csv -Path 'C:\Example\Project01\users_export.csv'
+}
+function Connect-Lab {
+    Connect-Thing -Server 'SRV-EXAMPLE01.corp.example' -UserName 'svc-example01' -Password 'Ex@mple-Passw0rd-1'
+}
+Connect-Lab
+Export-Users

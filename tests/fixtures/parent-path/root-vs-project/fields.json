@@ -1,0 +1,16 @@
+[
+ {
+  "id": "rootdir",
+  "name": "ROOT",
+  "kind": "path",
+  "example": "C:\\Example",
+  "real": "C:\\Temp"
+ },
+ {
+  "id": "root",
+  "name": "PROJECT_ROOT",
+  "kind": "path",
+  "example": "C:\\Example\\Project01",
+  "real": "C:\\Temp\\AdSync"
+ }
+]

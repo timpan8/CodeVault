@@ -1,0 +1,23 @@
+{
+ "slots": [
+  {
+   "fieldId": "user",
+   "line": 1,
+   "status": "confirm",
+   "warnings": [
+    "remap:admin"
+   ]
+  },
+  {
+   "fieldId": "user",
+   "line": 2,
+   "status": "confirm",
+   "warnings": [
+    "remap:admin"
+   ]
+  }
+ ],
+ "missing": [
+  "admin"
+ ]
+}

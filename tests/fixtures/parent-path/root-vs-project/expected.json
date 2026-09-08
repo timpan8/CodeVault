@@ -1,0 +1,17 @@
+{
+ "slots": [
+  {
+   "fieldId": "rootdir",
+   "line": 1,
+   "status": "confirm",
+   "warnings": [
+    "parent-widening"
+   ]
+  },
+  {
+   "fieldId": "root",
+   "line": 2,
+   "status": "auto"
+  }
+ ]
+}

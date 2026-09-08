@@ -1,0 +1,3 @@
+$Username = 'svc-adsync'
+$Password = 'Sommar2024!'
+Connect-Thing -Server 'dc02.corp.contoso.se' -UserName $Username

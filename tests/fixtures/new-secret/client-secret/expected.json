@@ -1,0 +1,23 @@
+{
+ "slots": [
+  {
+   "fieldId": null,
+   "line": 1,
+   "status": "candidate",
+   "kindGuess": "password",
+   "literal": "abc123XYZ!def"
+  },
+  {
+   "fieldId": null,
+   "line": 1,
+   "status": "candidate",
+   "kindGuess": "tenantId",
+   "literal": "3f2a9b1c-1234-4abc-9def-123456789abc"
+  },
+  {
+   "fieldId": "user",
+   "line": 2,
+   "status": "auto"
+  }
+ ]
+}

@@ -1,0 +1,4 @@
+$Username = 'svc-example01'
+$Password = 'Ex@mple-Passw0rd-1'
+Connect-Thing -Server 'SRV-EXAMPLE01.corp.example' -Credential (New-Object PSCredential($Username, (ConvertTo-SecureString $Password -AsPlainText -Force)))
+Export-Csv -Path 'C:\Example\Project01\users.csv' -NoTypeInformation

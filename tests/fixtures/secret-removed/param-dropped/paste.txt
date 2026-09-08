@@ -1,0 +1,2 @@
+$Username = 'svc-example01'
+Connect-Thing -UserName $Username -UseDefaultCredentials

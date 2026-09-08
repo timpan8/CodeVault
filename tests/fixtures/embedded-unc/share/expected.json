@@ -1,0 +1,14 @@
+{
+ "slots": [
+  {
+   "fieldId": "srv",
+   "line": 1,
+   "status": "auto"
+  },
+  {
+   "fieldId": "root",
+   "line": 1,
+   "status": "auto"
+  }
+ ]
+}

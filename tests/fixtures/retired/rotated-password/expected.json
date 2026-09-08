@@ -1,0 +1,19 @@
+{
+ "slots": [
+  {
+   "fieldId": "pw",
+   "line": 1,
+   "status": "auto",
+   "warnings": [
+    "exposed"
+   ],
+   "why": "retired"
+  }
+ ],
+ "flags": {
+  "retiredFound": [
+   "pw"
+  ],
+  "directionWarning": true
+ }
+}

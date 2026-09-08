@@ -1,0 +1,17 @@
+{
+ "slots": [
+  {
+   "fieldId": "root",
+   "line": 1,
+   "status": "confirm",
+   "warnings": [
+    "destructive-path"
+   ]
+  },
+  {
+   "fieldId": "root",
+   "line": 2,
+   "status": "auto"
+  }
+ ]
+}

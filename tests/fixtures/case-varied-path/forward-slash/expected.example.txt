@@ -1,0 +1,1 @@
+Export-Csv -Path "C:\Example\Project01/out.csv" -NoTypeInformation

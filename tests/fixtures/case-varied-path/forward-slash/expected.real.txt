@@ -1,0 +1,1 @@
+Export-Csv -Path "C:\Temp\AdSync/out.csv" -NoTypeInformation
