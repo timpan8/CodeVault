@@ -2,12 +2,15 @@
  * Encrypted backups, plaintext structure export and restore.
  *
  * A backup is the vault header plus every encrypted record, so it can be
- * opened anywhere with the master password (or the recovery key). The
+ * opened anywhere with the master password (or the recovery key). A backup of
+ * an unprotected vault carries its local key instead — without it the file
+ * would be unopenable on another machine — so that file protects nothing and
+ * the UI says so before writing it. The
  * structure export contains templates, field names, kinds and example values
  * but never a real value; the caller runs the guard over it before writing.
  */
 import { serializeTemplate } from '@engine/template'
-import { decryptRecord, unlockWithPassword, unlockWithRecoveryKey, type VaultHeader } from './crypto'
+import { decryptRecord, unlockWithLocalKey, unlockWithPassword, unlockWithRecoveryKey, VaultKeyError, type VaultHeader } from './crypto'
 import type { DecodedRecord, RawRecord } from './store'
 import { VaultStore } from './store'
 import type { FieldRecord, RecordType, ScriptRecord, VersionRecord } from './model'
@@ -15,16 +18,32 @@ import type { FieldRecord, RecordType, ScriptRecord, VersionRecord } from './mod
 export const BACKUP_MAGIC = 'codevault-backup'
 export const STRUCTURE_MAGIC = 'codevault-structure'
 
+export const BACKUP_FORMAT_VERSION = 2
+
 export interface BackupFile {
   magic: typeof BACKUP_MAGIC
-  formatVersion: 1
+  formatVersion: 1 | 2
   exportedAt: string
   header: VaultHeader
   records: RawRecord[]
+  /** Set iff the vault is unprotected: the key that opens `records`. */
+  localKey?: string
 }
 
-export function buildBackup(header: VaultHeader, records: RawRecord[], now = new Date().toISOString()): BackupFile {
-  return { magic: BACKUP_MAGIC, formatVersion: 1, exportedAt: now, header, records }
+export function buildBackup(header: VaultHeader, records: RawRecord[], now = new Date().toISOString(), localKey?: string): BackupFile {
+  return {
+    magic: BACKUP_MAGIC,
+    formatVersion: BACKUP_FORMAT_VERSION,
+    exportedAt: now,
+    header,
+    records,
+    ...(header.protection === 'none' && localKey ? { localKey } : {}),
+  }
+}
+
+/** True when the file opens without a secret, i.e. it is only as safe as where you put it. */
+export function backupIsUnprotected(b: BackupFile): boolean {
+  return b.header.protection === 'none'
 }
 
 export function serializeBackup(b: BackupFile): string {
@@ -40,7 +59,7 @@ export function parseBackup(text: string): BackupFile {
   }
   const b = parsed as Partial<BackupFile>
   if (b.magic !== BACKUP_MAGIC || !b.header || !Array.isArray(b.records)) throw new Error('Not a CodeVault backup')
-  if ((b.formatVersion ?? 0) > 1) throw new Error('Backup was written by a newer app version')
+  if ((b.formatVersion ?? 0) > BACKUP_FORMAT_VERSION) throw new Error('Backup was written by a newer app version')
   return b as BackupFile
 }
 
@@ -54,11 +73,19 @@ export function structureFilename(now = new Date()): string {
   return backupFilename(now).replace(/\.enc$/, '.structure.json')
 }
 
-export async function openBackup(
-  b: BackupFile,
-  secret: { password: string } | { recoveryKey: string },
-): Promise<{ dek: CryptoKey; records: DecodedRecord[] }> {
-  const dek = 'password' in secret ? await unlockWithPassword(b.header, secret.password) : await unlockWithRecoveryKey(b.header, secret.recoveryKey)
+export type BackupSecret = { password: string } | { recoveryKey: string } | null
+
+async function backupDek(b: BackupFile, secret: BackupSecret): Promise<CryptoKey> {
+  if (b.header.protection === 'none') {
+    if (!b.localKey) throw new VaultKeyError('This backup of an unprotected vault carries no key')
+    return unlockWithLocalKey(b.header, b.localKey)
+  }
+  if (!secret) throw new VaultKeyError('Vault has no master password')
+  return 'password' in secret ? unlockWithPassword(b.header, secret.password) : unlockWithRecoveryKey(b.header, secret.recoveryKey)
+}
+
+export async function openBackup(b: BackupFile, secret: BackupSecret): Promise<{ dek: CryptoKey; records: DecodedRecord[] }> {
+  const dek = await backupDek(b, secret)
   const records: DecodedRecord[] = []
   for (const row of b.records) {
     const json = await decryptRecord(dek, row.payload, `${row.type}:${row.id}`)
@@ -75,7 +102,7 @@ export interface RestoreTest {
 }
 
 /** Decrypt every record in memory and report counts. Nothing is written. */
-export async function testRestore(b: BackupFile, secret: { password: string } | { recoveryKey: string }): Promise<RestoreTest> {
+export async function testRestore(b: BackupFile, secret: BackupSecret): Promise<RestoreTest> {
   const { records } = await openBackup(b, secret)
   const counts: Record<string, number> = {}
   for (const r of records) counts[r.type] = (counts[r.type] ?? 0) + 1
@@ -85,6 +112,9 @@ export async function testRestore(b: BackupFile, secret: { password: string } | 
 /** Replace the local store with the backup (only for an empty or discarded vault). */
 export async function restoreIntoStore(store: VaultStore, b: BackupFile): Promise<void> {
   await store.replaceAll(b.header, b.records)
+  // The key travels with an unprotected backup; a protected one must not leave a stale key behind.
+  if (b.header.protection === 'none' && b.localKey) await store.writeLocalKey(b.localKey)
+  else await store.clearLocalKey()
 }
 
 export interface BackupOrigin {
@@ -98,7 +128,12 @@ export interface BackupOrigin {
 /** Compare a backup with the local header; a newer revision from elsewhere requires a merge, never a silent overwrite. */
 export function compareOrigin(local: VaultHeader | undefined, incoming: VaultHeader): BackupOrigin {
   if (!local) return { sameVault: false, fromOtherDevice: true, incomingRevision: incoming.revision, localRevision: 0, incomingIsNewer: true }
-  const sameVault = local.kdf.salt === incoming.kdf.salt || local.wrappedDEKRecovery === incoming.wrappedDEKRecovery
+  const sameVault =
+    local.vaultId && incoming.vaultId
+      ? local.vaultId === incoming.vaultId
+      : // format-1 headers carry no id; their unique salts stand in for one
+        (local.kdf !== undefined && local.kdf.salt === incoming.kdf?.salt) ||
+        (local.wrappedDEKRecovery !== undefined && local.wrappedDEKRecovery === incoming.wrappedDEKRecovery)
   return {
     sameVault,
     fromOtherDevice: incoming.deviceId !== local.deviceId,

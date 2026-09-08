@@ -59,7 +59,8 @@ export interface BackupOutcome {
 export async function writeBackupNow(session: VaultSession, opts: { allowDownload: boolean }): Promise<BackupOutcome> {
   const now = new Date()
   const name = backupFilename(now)
-  const backup = serializeBackup(buildBackup(session.header, await store.allRaw(), now.toISOString()))
+  // An unprotected vault has no secret to reopen the file with, so the key rides along.
+  const backup = serializeBackup(buildBackup(session.header, await store.allRaw(), now.toISOString(), await store.localKey()))
   const structure = buildStructureExport(
     {
       header: session.header,

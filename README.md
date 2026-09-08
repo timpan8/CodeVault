@@ -11,6 +11,7 @@ Kodbasen kommer från mappen `codevault/` i [timpan8/Coding-Tool](https://github
 - **En version lagras aldrig som kod med riktiga värden.** Den lagras som en mall (textsegment + fältreferenser) och en separat krypterad fälttabell. "Kod för AI" och "riktig kod" är två renderingar av samma objekt. Diff, versionsbibliotek, sök och export blir säkra genom konstruktion.
 - **Verktyget äger exempelvärdena.** Stabila, realistiska till formen men i reserverade namnrymder (`example.com`, `corp.example`, `SRV-EXAMPLE01`, `192.0.2.x`, `C:\Example\Project01`). AI:n bevarar dem ordagrant, så återapplicering blir i huvudsak exakt strängmatchning, och en fejk kan aldrig förväxlas med ett riktigt värde.
 - **Konservativ automatik.** Bara exakta träffar på exempelvärdet autoappliceras. Allt annat visas i en granskningsvy. "Kopiera riktigt" blockeras tills hemliga fält är lösta.
+- **Lösenordet är ett tillval, inte en tröskel.** Valvet startar utan master-lösenord så att du kan använda verktyget direkt. Posterna krypteras alltid, men utan lösenord ligger nyckeln bredvid datan i webbläsaren, så skyddet är då webbläsarprofilen och inget mer. Du kan lägga till ett lösenord när som helst under **Inställningar → Säkerhet**; bara headern skrivs om, så det går på ett ögonblick oavsett hur mycket du har sparat, och lika enkelt att ta bort igen.
 - **En oberoende läckvakt** skannar allt som lämnar "för AI" mot alla kända riktiga värden (inklusive kodade varianter) och vägrar kopiera vid träff.
 
 ## Ordlista
@@ -24,10 +25,16 @@ Kodbasen kommer från mappen `codevault/` i [timpan8/Coding-Tool](https://github
 | Markera | Peka ut var i koden ett fält sitter |
 | Kopiera för AI | Sanerad rendering, alltid genom läckvakten |
 | Kopiera riktigt | Riktig rendering, en enda skyddad kodväg |
+| Skyddat valv | Valv med master-lösenord: nyckeln finns ingenstans på disk |
+| Oskyddat valv | Valv utan lösenord: nyckeln ligger bredvid datan, öppnas direkt |
 
 ## Hotmodell i korthet
 
-Verktyget skyddar mot att riktiga värden når AI-chatten via urklipp, mot att de ligger i klartext på disk (allt i valvet krypteras; IndexedDB innehåller bara chiffertext) och mot skärmdelning (maskerat som standard). Det skyddar **inte** mot webbläsartillägg som läser sidan, mot en editor med inbyggd AI (Copilot, Cursor) som redan ser den riktiga filen, och det kan inte radera poster ur Windows urklippshistorik (Win+V) från en webbsida.
+Det verktyget alltid skyddar mot, oavsett läge: att riktiga värden når AI-chatten via urklipp (läckvakten står mellan), att de ligger i klartext på disk (varje post är AES-GCM i IndexedDB) och skärmdelning (maskerat som standard).
+
+Vad master-lösenordet lägger till: utan lösenord ligger valvets nyckel i samma databas som datan, så vem som helst som kommer åt din inloggade webbläsarprofil kan öppna valvet — och auto-lås är då avstängt, eftersom ett lås utan hemlighet bara skulle låsa upp sig självt igen. Med lösenord finns nyckeln ingenstans på disk och auto-låset gör nytta. Backupfilen ärver samma sak: en backup av ett oskyddat valv bär med sig sin egen nyckel (annars gick den inte att öppna på en annan maskin) och är därför bara så säker som platsen du lägger den på.
+
+Det skyddar **inte**, i något läge, mot webbläsartillägg som läser sidan, mot en editor med inbyggd AI (Copilot, Cursor) som redan ser den riktiga filen, och det kan inte radera poster ur Windows urklippshistorik (Win+V) från en webbsida.
 
 ## Köra
 
@@ -60,7 +67,7 @@ Sidan **Om** i appen kör motorns fixture-svit i webbläsaren (självtest) och v
 
 ## Arbetsflöde
 
-1. Första start: välj master-lösenord och spara återställningsnyckeln.
+1. Första start: **Kom igång direkt**, eller sätt ett master-lösenord med en gång. Väljer du lösenord får du en återställningsnyckel att spara.
 2. **Importera från min editor** eller **Ny version från AI**: klistra in, granska kandidaterna (auto, bekräfta, nya, saknas, okända), spara.
 3. **Kopiera för AI** ger den sanerade renderingen, alltid genom läckvakten. **Kopiera riktigt** kräver två tryck och visar en checklista först.
 4. Nästa version från AI:n: klistra in, fälten återappliceras, granska det som inte var exakt.
@@ -76,13 +83,13 @@ Kortkommandon:
 | `Ctrl+Shift+C` | Kopiera för AI |
 | `Ctrl+Shift+D` | Diff |
 | `Alt+Upp` / `Alt+Ner` | Byt version |
-| `Ctrl+Shift+L` | Lås valvet |
+| `Ctrl+Shift+L` | Lås valvet (bara när det har ett master-lösenord) |
 
 "Kopiera riktigt" har med avsikt inget kortkommando.
 
 ## Vad som ingår och vad som väntar
 
-Ingår: mall + fält, konservativ återapplicering med granskningsvy, läckvakt i tre pass, krypterat valv med återställningsnyckel, auto-lås, roterande krypterad backup och struktur-export, import av backup från en annan maskin med merge, sanera-text-ruta, tabellblock som fält, diff, härledda sökvägsfält från en Root, New-Item-rad.
+Ingår: mall + fält, konservativ återapplicering med granskningsvy, läckvakt i tre pass, krypterat valv som startar utan lösenord och kan skyddas med ett i efterhand (med återställningsnyckel och auto-lås), roterande krypterad backup och struktur-export, import av backup från en annan maskin med merge, sanera-text-ruta, tabellblock som fält, diff, härledda sökvägsfält från en Root, New-Item-rad.
 
 Väntar (v2): testdatatabeller med generatorer, miljöprofiler (Test/Prod), sökvägssänk-panel med klicka-för-att-tillämpa, standardsnippets, patch-läge för partiella AI-svar, semantisk sammanfattning av vad som ändrats mellan versioner.
 

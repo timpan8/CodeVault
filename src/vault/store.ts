@@ -3,9 +3,13 @@
  * clear; every record is AES-GCM ciphertext with AAD = type:id. The clear
  * columns `type`, `scriptId`, `updatedAt`, `deviceId` are opaque ids and
  * timestamps needed for indexing and merge.
+ *
+ * An unprotected vault also keeps its DEK here, under the `localKey` meta row.
+ * That is the whole difference between the two modes: with a master password
+ * the key is nowhere on disk, without one it is in the row next to the data.
  */
 import Dexie, { type Table } from 'dexie'
-import { decryptRecord, encryptRecord, type VaultHeader } from './crypto'
+import { decryptRecord, encryptRecord, normalizeHeader, type VaultHeader } from './crypto'
 import type { RecordType } from './model'
 
 export interface RawRecord {
@@ -21,6 +25,8 @@ interface MetaRow {
   key: string
   value: unknown
 }
+
+const LOCAL_KEY_ROW = 'localKey'
 
 class VaultDb extends Dexie {
   records!: Table<RawRecord, string>
@@ -53,7 +59,7 @@ export class VaultStore {
 
   async header(): Promise<VaultHeader | undefined> {
     const row = await this.db.meta.get('header')
-    return row?.value as VaultHeader | undefined
+    return row ? normalizeHeader(row.value as VaultHeader) : undefined
   }
 
   async writeHeader(header: VaultHeader): Promise<void> {
@@ -62,6 +68,19 @@ export class VaultStore {
 
   async exists(): Promise<boolean> {
     return (await this.header()) !== undefined
+  }
+
+  /** The DEK of an unprotected vault, base64. Absent once a master password is set. */
+  async localKey(): Promise<string | undefined> {
+    return this.getMeta<string>(LOCAL_KEY_ROW)
+  }
+
+  async writeLocalKey(key: string): Promise<void> {
+    await this.setMeta(LOCAL_KEY_ROW, key)
+  }
+
+  async clearLocalKey(): Promise<void> {
+    await this.db.meta.delete(LOCAL_KEY_ROW)
   }
 
   /** Small clear-text settings that must be readable while locked (e.g. a directory handle). */

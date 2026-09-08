@@ -16,23 +16,22 @@ async function readClipboard(page: Page): Promise<string> {
   return page.evaluate(() => navigator.clipboard.readText())
 }
 
-test('core loop: create vault, import from editor, copy both ways, new version, lock and unlock', async ({ page }) => {
+/** The default first run: no password, straight into the app. */
+async function startWithoutPassword(page: Page): Promise<void> {
+  await expect(page.getByRole('heading', { name: 'Skapa ditt valv' })).toBeVisible()
+  await page.getByRole('button', { name: 'Kom igång direkt' }).click()
+  await expect(page.getByRole('heading', { name: 'Skript', exact: true })).toBeVisible({ timeout: 30_000 })
+}
+
+test('core loop: open vault, import from editor, copy both ways, new version, add password, lock and unlock', async ({ page }) => {
   await page.goto('/')
 
-  // --- setup: master password + recovery key
-  await expect(page.getByRole('heading', { name: 'Skapa ditt valv' })).toBeVisible()
-  const secrets = page.locator('input.cv-secret')
-  await secrets.nth(0).fill(PASSWORD)
-  await secrets.nth(1).fill(PASSWORD)
-  await page.getByRole('button', { name: 'Skapa valv' }).click()
-  await expect(page.getByRole('heading', { name: 'Din återställningsnyckel' })).toBeVisible({ timeout: 30_000 })
-  const recoveryKey = (await page.locator('pre.cv-recovery').innerText()).trim()
-  expect(recoveryKey).toMatch(/^([0-9A-F]{4}-){7}[0-9A-F]{4}$/)
-  await page.getByLabel(/Jag har sparat/).check()
-  await page.getByRole('button', { name: 'Öppna valvet' }).click()
+  // --- setup: the default is no password at all
+  await startWithoutPassword(page)
+  await expect(page.locator('.cv-header-right')).toContainText('Oskyddat')
+  await expect(page.getByRole('button', { name: /Lås/ })).toHaveCount(0)
 
   // --- first paste: from the editor, real values inside
-  await expect(page.getByRole('heading', { name: 'Skript', exact: true })).toBeVisible()
   await page.locator('textarea.cv-paste-area').fill(EDITOR_PASTE)
   await page.getByLabel(/Ja, den kommer från min editor/).check()
   await page.getByRole('button', { name: 'Analysera', exact: true }).click()
@@ -72,9 +71,8 @@ test('core loop: create vault, import from editor, copy both ways, new version, 
   await expect(page.locator('.cv-editor')).toBeVisible()
   await expect(page.locator('.cv-pill')).toHaveCount(3)
   await page.getByRole('button', { name: /Kopiera för AI/ }).click()
-  await expect(page.locator('.cv-toast-ok')).toBeVisible()
+  await expect.poll(() => readClipboard(page)).toContain('Ex@mple-Passw0rd-1')
   const aiCopy = await readClipboard(page)
-  expect(aiCopy).toContain('Ex@mple-Passw0rd-1')
   expect(aiCopy).toContain('SRV-EXAMPLE01.corp.example')
   expect(aiCopy).toContain('svc-example01')
   expect(aiCopy).not.toContain('svc-adsync')
@@ -96,7 +94,7 @@ test('core loop: create vault, import from editor, copy both ways, new version, 
   expect(realCopy).not.toContain('Ex@mple-Passw0rd-1')
   await page.getByRole('button', { name: 'Rensa nu' }).click()
   await expect(page.locator('.cv-banner')).toHaveCount(0)
-  expect((await readClipboard(page)).trim()).toBe('')
+  await expect.poll(async () => (await readClipboard(page)).trim()).toBe('')
 
   // --- new version from the AI: renamed variable, examples kept
   const aiVersion = aiCopy
@@ -132,9 +130,25 @@ test('core loop: create vault, import from editor, copy both ways, new version, 
 
   // sanitized copy of v2 still carries no real value
   await page.getByRole('button', { name: /Kopiera för AI/ }).click()
-  const aiCopy2 = await readClipboard(page)
-  expect(aiCopy2).toContain('$AdminPassword')
-  expect(aiCopy2).not.toContain(REAL_PW)
+  await expect.poll(() => readClipboard(page)).toContain('$AdminPassword')
+  expect(await readClipboard(page)).not.toContain(REAL_PW)
+
+  // --- locking is off until the vault is given a password
+  await page.keyboard.press('Control+Shift+L')
+  await expect(page.getByRole('heading', { name: 'Lås upp valvet' })).toHaveCount(0)
+
+  // --- opt in to a master password from Settings; no data is re-encrypted
+  await page.getByRole('button', { name: 'Inställningar' }).click()
+  const security = page.locator('.cv-card', { has: page.getByRole('heading', { name: 'Säkerhet' }) })
+  await expect(security.locator('.cv-callout-warn')).toBeVisible()
+  const newSecrets = security.locator('input.cv-secret')
+  await newSecrets.nth(0).fill(PASSWORD)
+  await newSecrets.nth(1).fill(PASSWORD)
+  await security.getByRole('button', { name: 'Lägg till master-lösenord' }).click()
+  await expect(page.getByRole('heading', { name: 'Din återställningsnyckel' })).toBeVisible({ timeout: 30_000 })
+  expect((await page.locator('pre.cv-recovery').innerText()).trim()).toMatch(/^([0-9A-F]{4}-){7}[0-9A-F]{4}$/)
+  await page.getByRole('button', { name: 'Stäng' }).click()
+  await expect(page.locator('.cv-header-right')).not.toContainText('Oskyddat')
 
   // --- lock and unlock
   await page.keyboard.press('Control+Shift+L')
@@ -149,16 +163,29 @@ test('core loop: create vault, import from editor, copy both ways, new version, 
   await expect(page.locator('.cv-script-row')).toContainText('2 versioner')
 })
 
+test('a vault reopens by itself on reload while it has no password', async ({ page }) => {
+  await page.goto('/')
+  await startWithoutPassword(page)
+  await page.locator('textarea.cv-paste-area').fill("$Server = 'dc01.corp.contoso.se'")
+  await page.getByLabel(/Ja, den kommer från min editor/).check()
+  await page.getByRole('button', { name: 'Analysera', exact: true }).click()
+  await page.locator('.cv-group-unknown .cv-row').first().getByRole('button', { name: 'Skapa fält' }).click()
+  const form = page.locator('.cv-modal form')
+  await form.locator('input.cv-input').first().fill('DC')
+  await form.getByRole('button', { name: 'Skapa fält' }).click()
+  await page.getByRole('button', { name: 'Spara version' }).click()
+  await expect(page.locator('.cv-editor')).toBeVisible()
+
+  await page.reload()
+  // no unlock screen: straight back to the script that was there before
+  await expect(page.getByRole('heading', { name: 'Skript', exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator('.cv-script-row')).toHaveCount(1)
+})
+
 test('sanitize pane replaces known values and the guard blocks unknown ones', async ({ page }) => {
   await page.goto('/')
-  // vault persists in IndexedDB between tests of the same browser context? No: each test gets a fresh context.
-  await expect(page.getByRole('heading', { name: 'Skapa ditt valv' })).toBeVisible()
-  const secrets = page.locator('input.cv-secret')
-  await secrets.nth(0).fill(PASSWORD)
-  await secrets.nth(1).fill(PASSWORD)
-  await page.getByRole('button', { name: 'Skapa valv' }).click()
-  await page.getByLabel(/Jag har sparat/).check({ timeout: 30_000 })
-  await page.getByRole('button', { name: 'Öppna valvet' }).click()
+  // each test gets a fresh browser context, so the vault is always created here
+  await startWithoutPassword(page)
 
   await page.getByRole('button', { name: 'Sanera text' }).click()
   await page.locator('textarea').fill('Get-ADUser : Cannot contact the server dc01.corp.contoso.se\nAt C:\\Users\\tim.pan\\Documents\\sync.ps1:12 char:5\nContact anna.svensson@contoso.se')

@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks'
-import { compareOrigin, openBackup, parseBackup, restoreIntoStore, testRestore, type BackupFile } from '@vault/backup'
+import { backupIsUnprotected, compareOrigin, openBackup, parseBackup, restoreIntoStore, testRestore, type BackupFile } from '@vault/backup'
 import { planIsEmpty, planMerge, type MergePlan } from '@vault/merge'
 import { VaultSession } from '@vault/session'
 import { WrongPasswordError, formatRecoveryKey } from '@vault/crypto'
@@ -58,6 +58,7 @@ function BackupSection() {
     <section class="cv-card">
       <h3>{t('settings.backup')}</h3>
       <p class="cv-muted">{t('settings.backupIntro')}</p>
+      {!getSession().isProtected && <div class="cv-callout cv-callout-warn">{t('settings.backupUnprotected')}</div>}
       <div class="cv-label">
         {t('settings.backupFolder')}
         <div class="cv-actions">
@@ -112,7 +113,7 @@ function ImportSection() {
     setBusy(true)
     setError(null)
     try {
-      const { records } = await openBackup(file, { password: pw })
+      const { records } = await openBackup(file, secretFor(file))
       setPlan(planMerge(await session.allDecoded(), records))
     } catch (e) {
       setError(e instanceof WrongPasswordError ? t('unlock.wrong') : e instanceof Error ? e.message : String(e))
@@ -125,7 +126,7 @@ function ImportSection() {
     if (!file) return
     setBusy(true)
     try {
-      const r = await testRestore(file, { password: pw })
+      const r = await testRestore(file, secretFor(file))
       setTestResult(t('settings.testRestoreOk', { counts: Object.entries(r.counts).map(([k, v]) => `${k}: ${v}`).join(', ') }))
       await session.updateSettings({ lastBackupVerifiedAt: new Date().toISOString() })
     } catch (e) {
@@ -153,7 +154,7 @@ function ImportSection() {
     setBusy(true)
     try {
       await restoreIntoStore(store, file)
-      const fresh = await VaultSession.open(store, { password: pw }, { appVersion: APP_VERSION })
+      const fresh = await VaultSession.open(store, secretFor(file), { appVersion: APP_VERSION })
       session.lock()
       setSession(fresh)
       toast(t('settings.importDone'), 'ok')
@@ -166,7 +167,10 @@ function ImportSection() {
     }
   }
 
+  /** A backup of an unprotected vault carries its own key; there is nothing to type. */
+  const secretFor = (f: BackupFile) => (backupIsUnprotected(f) ? null : { password: pw })
   const origin = file ? compareOrigin(session.header, file.header) : null
+  const needsPassword = file !== null && !backupIsUnprotected(file)
   const localEmpty = session.listScripts().length === 0 && session.listFields(true).length === 0
 
   return (
@@ -182,19 +186,23 @@ function ImportSection() {
             {fileName} · {t('settings.importOrigin', { device: file.header.deviceId.slice(0, 8), rev: file.header.revision, local: session.header.revision })}
             {origin?.fromOtherDevice && <span class="cv-warn"> {t('settings.importOtherDevice')}</span>}
           </p>
-          <label class="cv-label">
-            {t('settings.importPassword')}
-            <SecretInput value={pw} onInput={setPw} ariaLabel={t('settings.importPassword')} />
-          </label>
+          {needsPassword ? (
+            <label class="cv-label">
+              {t('settings.importPassword')}
+              <SecretInput value={pw} onInput={setPw} ariaLabel={t('settings.importPassword')} />
+            </label>
+          ) : (
+            <div class="cv-callout cv-callout-warn">{t('settings.importUnprotected')}</div>
+          )}
           <div class="cv-actions">
-            <button type="button" class="cv-btn cv-btn-primary" onClick={() => void analyze()} disabled={busy || !pw}>
+            <button type="button" class="cv-btn cv-btn-primary" onClick={() => void analyze()} disabled={busy || (needsPassword && !pw)}>
               {t('settings.importAnalyze')}
             </button>
-            <button type="button" class="cv-btn" onClick={() => void test()} disabled={busy || !pw}>
+            <button type="button" class="cv-btn" onClick={() => void test()} disabled={busy || (needsPassword && !pw)}>
               {t('settings.testRestore')}
             </button>
             {localEmpty && (
-              <button type="button" class="cv-btn cv-btn-danger" onClick={() => void replace()} disabled={busy || !pw}>
+              <button type="button" class="cv-btn cv-btn-danger" onClick={() => void replace()} disabled={busy || (needsPassword && !pw)}>
                 {t('settings.importReplace')}
               </button>
             )}
@@ -257,13 +265,83 @@ function ImportSection() {
 
 function SecuritySection() {
   const session = getSession()
+  const [recovery, setRecovery] = useState<string | null>(null)
+
+  return (
+    <section class="cv-card">
+      <h3>{t('settings.security')}</h3>
+      {session.isProtected ? <ProtectedControls onRecovery={setRecovery} /> : <UnprotectedControls onRecovery={setRecovery} />}
+      {recovery && (
+        <Modal title={t('setup.recoveryTitle')} onClose={() => setRecovery(null)}>
+          <p>{t('setup.recoveryIntro')}</p>
+          <pre class="cv-pre cv-recovery" onContextMenu={(e) => e.preventDefault()}>
+            {formatRecoveryKey(recovery)}
+          </pre>
+        </Modal>
+      )}
+    </section>
+  )
+}
+
+/** No master password: offer to add one. Nothing is re-encrypted when you do. */
+function UnprotectedControls({ onRecovery }: { onRecovery: (key: string) => void }) {
+  const session = getSession()
+  const [pw, setPw] = useState('')
+  const [pw2, setPw2] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const add = async () => {
+    if (pw.length < 10) return toast(t('setup.tooShort'), 'warn')
+    if (pw !== pw2) return toast(t('setup.mismatch'), 'warn')
+    setBusy(true)
+    try {
+      onRecovery(await session.addPassword(pw))
+      startAutoLock()
+      setPw('')
+      setPw2('')
+      toast(t('settings.passwordAdded'), 'ok')
+    } catch (e) {
+      toast(t('common.error', { message: e instanceof Error ? e.message : String(e) }), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div class="cv-callout cv-callout-warn">{t('settings.unprotectedWarning')}</div>
+      <div class="cv-grid-2">
+        <label class="cv-label">
+          {t('setup.password')}
+          <SecretInput value={pw} onInput={setPw} ariaLabel={t('setup.password')} />
+        </label>
+        <label class="cv-label">
+          {t('setup.passwordRepeat')}
+          <SecretInput value={pw2} onInput={setPw2} ariaLabel={t('setup.passwordRepeat')} />
+        </label>
+      </div>
+      <div class="cv-actions">
+        <button type="button" class="cv-btn cv-btn-primary" onClick={() => void add()} disabled={busy || !pw || !pw2}>
+          {t('settings.addPassword')}
+        </button>
+      </div>
+    </>
+  )
+}
+
+/** Master password set: change it, reissue the recovery key, or give it up. */
+function ProtectedControls({ onRecovery }: { onRecovery: (key: string) => void }) {
+  const session = getSession()
   const settings = session.getSettings()
   const [cur, setCur] = useState('')
   const [next, setNext] = useState('')
   const [busy, setBusy] = useState(false)
-  const [recovery, setRecovery] = useState<string | null>(null)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const [lockMin, setLockMin] = useState(String(settings.lockTimeoutMinutes))
   const [hiddenMin, setHiddenMin] = useState(String(settings.hiddenTabLockMinutes))
+
+  const failed = (e: unknown) =>
+    toast(e instanceof WrongPasswordError ? t('unlock.wrong') : t('common.error', { message: e instanceof Error ? e.message : String(e) }), 'error')
 
   const change = async () => {
     if (next.length < 10) return toast(t('setup.tooShort'), 'warn')
@@ -274,7 +352,7 @@ function SecuritySection() {
       setCur('')
       setNext('')
     } catch (e) {
-      toast(e instanceof WrongPasswordError ? t('unlock.wrong') : t('common.error', { message: e instanceof Error ? e.message : String(e) }), 'error')
+      failed(e)
     } finally {
       setBusy(false)
     }
@@ -283,9 +361,25 @@ function SecuritySection() {
   const rotate = async () => {
     setBusy(true)
     try {
-      setRecovery(await session.rotateRecoveryKey(cur))
+      onRecovery(await session.rotateRecoveryKey(cur))
     } catch (e) {
-      toast(e instanceof WrongPasswordError ? t('unlock.wrong') : t('common.error', { message: e instanceof Error ? e.message : String(e) }), 'error')
+      failed(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    if (!confirmRemove) return setConfirmRemove(true)
+    setBusy(true)
+    try {
+      await session.removePassword({ password: cur })
+      startAutoLock()
+      setCur('')
+      setConfirmRemove(false)
+      toast(t('settings.passwordRemoved'), 'warn', 6000)
+    } catch (e) {
+      failed(e)
     } finally {
       setBusy(false)
     }
@@ -298,8 +392,7 @@ function SecuritySection() {
   }
 
   return (
-    <section class="cv-card">
-      <h3>{t('settings.security')}</h3>
+    <>
       <div class="cv-grid-2">
         <label class="cv-label">
           {t('settings.currentPassword')}
@@ -317,15 +410,10 @@ function SecuritySection() {
         <button type="button" class="cv-btn" onClick={() => void rotate()} disabled={busy || !cur} title={t('settings.showRecoveryHint')}>
           {t('settings.showRecovery')}
         </button>
+        <button type="button" class="cv-btn cv-btn-ghost" onClick={() => void remove()} disabled={busy || !cur} title={t('settings.removePasswordHint')}>
+          {confirmRemove ? t('settings.removePasswordConfirm') : t('settings.removePassword')}
+        </button>
       </div>
-      {recovery && (
-        <Modal title={t('setup.recoveryTitle')} onClose={() => setRecovery(null)}>
-          <p>{t('setup.recoveryIntro')}</p>
-          <pre class="cv-pre cv-recovery" onContextMenu={(e) => e.preventDefault()}>
-            {formatRecoveryKey(recovery)}
-          </pre>
-        </Modal>
-      )}
       <div class="cv-grid-2">
         <label class="cv-label">
           {t('settings.lockTimeout')}
@@ -341,7 +429,7 @@ function SecuritySection() {
           {t('common.save')}
         </button>
       </div>
-    </section>
+    </>
   )
 }
 

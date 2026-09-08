@@ -1,5 +1,6 @@
 import { useEffect } from 'preact/hooks'
-import { getSession, hasSession, lock, navigate, onBeforeLock, phase, route, store, toast, useTick } from './state'
+import { APP_VERSION, getSession, hasSession, isVaultProtected, lock, navigate, onBeforeLock, openError, phase, route, setSession, store, toast, useTick } from './state'
+import { VaultSession } from '@vault/session'
 import { clipboardCountdown, clipboardStatus, clearRealClipboard, installClipboardListeners } from './clipboard'
 import { writeBackupNow } from './backup'
 import { useShortcut } from './keys'
@@ -15,12 +16,33 @@ import { t } from '@i18n/index'
 
 const SETUP_STEPS = ['backupFolder', 'org'] as const
 
+/**
+ * A vault with no master password has nothing to ask for, so it opens straight
+ * into the app. Anything else — no vault, a password, or a local key that has
+ * gone missing — lands on a screen that says what it needs.
+ */
+async function openOnStart(): Promise<void> {
+  const header = await store.header()
+  if (!header) {
+    phase.value = 'setup'
+    return
+  }
+  if (header.protection !== 'none') {
+    phase.value = 'locked'
+    return
+  }
+  try {
+    setSession(await VaultSession.open(store, null, { appVersion: APP_VERSION }))
+  } catch (e) {
+    openError.value = e instanceof Error ? e.message : String(e)
+    phase.value = 'locked'
+  }
+}
+
 export function App() {
   useEffect(() => {
     installClipboardListeners()
-    void store.exists().then((exists) => {
-      phase.value = exists ? 'locked' : 'setup'
-    })
+    void openOnStart()
     return onBeforeLock(async () => {
       if (!hasSession()) return
       const session = getSession()
@@ -51,6 +73,7 @@ function Main() {
   const r = route.value
   const settings = session.getSettings()
   const done = SETUP_STEPS.filter((s) => settings.setupDone.includes(s)).length
+  const protectedVault = isVaultProtected()
   useShortcut('ctrl+shift+l', () => void lock('manual'))
 
   return (
@@ -78,9 +101,16 @@ function Main() {
         </nav>
         <div class="cv-header-right">
           {session.changedSinceBackup && <span class="cv-chip cv-chip-warn" title={t('nav.backupPending')}>⚠ backup</span>}
-          <button type="button" class="cv-btn cv-btn-small" onClick={() => void lock('manual')} title={t('nav.lock')}>
-            🔒 {t('nav.lock')}
-          </button>
+          {!protectedVault && (
+            <button type="button" class="cv-chip cv-chip-warn cv-linkbtn" onClick={() => navigate({ view: 'settings' })} title={t('nav.unprotectedHint')}>
+              {t('nav.unprotected')}
+            </button>
+          )}
+          {protectedVault && (
+            <button type="button" class="cv-btn cv-btn-small" onClick={() => void lock('manual')} title={t('nav.lock')}>
+              🔒 {t('nav.lock')}
+            </button>
+          )}
         </div>
       </header>
       <ClipboardBanner />

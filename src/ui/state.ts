@@ -25,6 +25,8 @@ export const phase = signal<Phase>('loading')
 export const route = signal<Route>({ view: 'scripts' })
 export const tick = signal(0)
 export const lockReason = signal<'idle' | 'manual' | null>(null)
+/** Why the vault could not be opened on startup; only set for a broken store. */
+export const openError = signal<string | null>(null)
 
 export interface Toast {
   id: number
@@ -43,6 +45,11 @@ let nextToast = 1
 
 export function hasSession(): boolean {
   return session !== null && !session.isLocked
+}
+
+/** False for a vault with no master password: there is no secret to lock behind. */
+export function isVaultProtected(): boolean {
+  return session !== null && session.isProtected
 }
 
 export function getSession(): VaultSession {
@@ -79,7 +86,10 @@ export function toast(message: string, kind: Toast['kind'] = 'info', ms = 4000):
 
 export function startAutoLock(): void {
   lockController?.stop()
-  if (!session) return
+  lockController = null
+  // Locking an unprotected vault would only hide it from the user: it reopens
+  // with the key that is still sitting in the store.
+  if (!session || !session.isProtected) return
   const settings = session.getSettings()
   lockController = new LockController({
     idleMs: Math.max(1, settings.lockTimeoutMinutes) * 60_000,
@@ -97,7 +107,7 @@ export function onBeforeLock(fn: () => Promise<void> | void): () => void {
 }
 
 export async function lock(reason: 'idle' | 'manual' = 'manual'): Promise<void> {
-  if (!session) return
+  if (!session || !session.isProtected) return
   lockController?.stop()
   lockController = null
   for (const fn of beforeLockHooks) {
