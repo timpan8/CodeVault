@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { VaultSession } from '@vault/session'
 import { WrongPasswordError } from '@vault/crypto'
-import { APP_VERSION, lockReason, navigate, setSession, store } from '../state'
+import { APP_VERSION, lockReason, navigate, openError, setSession, store } from '../state'
 import { ensureBackupPermission } from '../backup'
 import { SecretInput } from '../components/SecretInput'
 import { t } from '@i18n/index'
@@ -48,6 +48,7 @@ export function Unlock() {
       >
         <h2>{t('unlock.title')}</h2>
         {lockReason.value === 'idle' && <p class="cv-muted">{t('unlock.lockedReason')}</p>}
+        {openError.value && <div class="cv-callout cv-callout-error">{t('unlock.keyMissing', { message: openError.value })}</div>}
         {mode === 'password' ? (
           <label class="cv-label">
             {t('unlock.password')}

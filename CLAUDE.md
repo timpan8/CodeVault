@@ -12,7 +12,13 @@ encrypted field table — never as code with real values in it. Two renderings o
 - **Riktigt** — your real values, one single guarded code path (`exportReal()`).
 
 The interface is Swedish (`src/i18n/sv.ts`, English fallback in `en.ts`). Everything is local:
-IndexedDB via Dexie, encrypted with a master password. No server, no network calls.
+IndexedDB via Dexie, every record AES-GCM under the vault DEK. No server, no network calls.
+
+The master password is **opt-in**. A new vault has `protection: 'none'`: the DEK sits in the store's
+`localKey` row beside the data, so the app opens with nothing to type. `addPassword` wraps that same
+DEK under a password and a recovery key and drops the local row — header-only, so switching either
+way never re-encrypts a record. An unprotected vault has no auto-lock and no lock button: locking
+without a secret would only reopen itself.
 
 ## Commands
 
@@ -58,6 +64,12 @@ Decisions, not accidents. Several are enforced by tests.
 7. **Same-origin CSP in `index.html`.** No CDN, no web fonts, no telemetry, no network calls.
 8. **Inputs are `type=text`** with manual masking and `autocomplete=off`, never `type=password`.
 9. **Only `dist/` is published.** Never user data, never a backup file.
+10. **Records are encrypted in both protection modes.** What changes is where the DEK lives, never
+    whether it is used — there is no plaintext storage path to keep in step. A backup of an
+    unprotected vault carries its `localKey`, so it opens with no secret; the UI says so before
+    writing one, and `restoreIntoStore` clears a stale key when restoring a protected backup.
+11. **The UI never oversells an unprotected vault.** The header carries an "Oskyddat" chip, and both
+    Setup and Settings state plainly that the key sits beside the data.
 
 ## Architecture
 
@@ -65,7 +77,8 @@ Decisions, not accidents. Several are enforced by tests.
 src/engine/   pure functions, no DOM, run in a Web Worker (rpc.ts / client.ts / worker.ts)
               template.ts (template model) · reapply.ts (three-tier matching) · guard.ts (leak guard)
               detectors.ts · encoding.ts (base64/URL/JSON/HTML/backtick/regex variants) · examples.ts
-src/vault/    crypto.ts · store.ts (Dexie) · lock.ts (auto-lock) · session.ts (the state machine)
+src/vault/    crypto.ts (two protection modes, one DEK) · store.ts (Dexie) · lock.ts (auto-lock)
+              session.ts (state machine: create/createUnprotected, addPassword/removePassword)
               backup.ts (rotating encrypted backup + structure export) · merge.ts (cross-machine import)
 src/ui/       Preact: screens/ (Setup, Unlock, Scripts, ScriptView, Sanitize, Settings, About)
               components/ (Editor, PasteSheet, DiffView, FieldsPanel, FieldForm, Exits, GuardFindings)

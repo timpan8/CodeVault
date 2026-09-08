@@ -4,6 +4,7 @@ import { VaultStore } from '@vault/store'
 import { VaultSession } from '@vault/session'
 import {
   backupFilename,
+  backupIsUnprotected,
   buildBackup,
   buildStructureExport,
   compareOrigin,
@@ -14,6 +15,7 @@ import {
   structureExportStrings,
   testRestore,
 } from '@vault/backup'
+import { VaultKeyError, type VaultHeader } from '@vault/crypto'
 import { guardShortText } from '@engine/guard'
 import { parseTemplate } from '@engine/template'
 
@@ -90,13 +92,92 @@ describe('backup', () => {
     }
   })
 
+  it('a backup of a protected vault carries no key of its own', async () => {
+    const { store, session } = await seeded()
+    const backup = buildBackup(session.header, await store.allRaw(), undefined, 'a-stray-key')
+    expect(backup.localKey).toBeUndefined()
+    expect(backupIsUnprotected(backup)).toBe(false)
+    await expect(openBackup(backup, null)).rejects.toBeInstanceOf(VaultKeyError)
+  })
+
+  it('a backup of an unprotected vault carries its key, and says so', async () => {
+    const store = newStore()
+    const now = clock()
+    const session = await VaultSession.createUnprotected(store, { now, deviceId: 'dev-A' })
+    await session.createScript({ title: 'AD sync' })
+    const pw = await session.createField({ name: 'SVC_PW', kind: 'password', real: 'Sommar2024!' })
+
+    const localKey = await store.localKey()
+    const backup = parseBackup(serializeBackup(buildBackup(session.header, await store.allRaw(), undefined, localKey)))
+    expect(backupIsUnprotected(backup)).toBe(true)
+    // the values are still encrypted in the file; it is the bundled key that opens it
+    expect(serializeBackup(backup)).not.toContain('Sommar2024!')
+    const opened = await openBackup(backup, null)
+    expect(opened.records.some((r) => r.type === 'field')).toBe(true)
+
+    // restoring elsewhere needs no secret, and the key lands in the new store
+    const fresh = newStore()
+    await restoreIntoStore(fresh, backup)
+    expect(await fresh.localKey()).toBe(localKey)
+    const re = await VaultSession.open(fresh, null)
+    expect(re.listScripts()[0]!.title).toBe('AD sync')
+    expect(re.realValue(pw.id)).toBe('Sommar2024!')
+  })
+
+  it('restoring a protected backup clears a local key left by an earlier vault', async () => {
+    const { store, session } = await seeded()
+    const backup = parseBackup(serializeBackup(buildBackup(session.header, await store.allRaw())))
+    const fresh = newStore()
+    await fresh.writeLocalKey('stale-key-from-a-previous-vault')
+    await restoreIntoStore(fresh, backup)
+    expect(await fresh.localKey()).toBeUndefined()
+    await expect(VaultSession.open(fresh, null)).rejects.toBeInstanceOf(VaultKeyError)
+    expect((await VaultSession.open(fresh, { password: 'pw' })).listScripts()[0]!.title).toBe('AD sync')
+  })
+
   it('compareOrigin flags other devices and newer revisions', () => {
-    const base = { formatVersion: 1, appVersion: '0', deviceId: 'A', revision: 5, kdf: { salt: 's', iterations: 1, hash: 'SHA-256' as const }, recoveryKdf: { salt: 'r', iterations: 1, hash: 'SHA-256' as const }, wrappedDEK: 'w', wrappedDEKRecovery: 'wr', namespaceIndex: 0, createdAt: '', updatedAt: '' }
+    const base: VaultHeader = {
+      formatVersion: 2,
+      vaultId: 'V1',
+      protection: 'password',
+      appVersion: '0',
+      deviceId: 'A',
+      revision: 5,
+      kdf: { salt: 's', iterations: 1, hash: 'SHA-256' },
+      recoveryKdf: { salt: 'r', iterations: 1, hash: 'SHA-256' },
+      wrappedDEK: 'w',
+      wrappedDEKRecovery: 'wr',
+      namespaceIndex: 0,
+      createdAt: '',
+      updatedAt: '',
+    }
     const other = { ...base, deviceId: 'B', revision: 9 }
     const o = compareOrigin(base, other)
     expect(o).toMatchObject({ sameVault: true, fromOtherDevice: true, incomingIsNewer: true, incomingRevision: 9, localRevision: 5 })
     expect(compareOrigin(base, { ...base, revision: 2 }).incomingIsNewer).toBe(false)
     expect(compareOrigin(undefined, other).fromOtherDevice).toBe(true)
-    expect(compareOrigin(base, { ...other, kdf: { ...base.kdf, salt: 'x' }, wrappedDEKRecovery: 'y' }).sameVault).toBe(false)
+    expect(compareOrigin(base, { ...other, vaultId: 'V2' }).sameVault).toBe(false)
+    // an unprotected vault has no salts at all, so the id is the only thing telling two apart
+    const open1: VaultHeader = { ...base, protection: 'none', vaultId: 'O1', kdf: undefined, recoveryKdf: undefined, wrappedDEK: undefined, wrappedDEKRecovery: undefined }
+    expect(compareOrigin(open1, { ...open1, revision: 9 }).sameVault).toBe(true)
+    expect(compareOrigin(open1, { ...open1, vaultId: 'O2' }).sameVault).toBe(false)
+  })
+
+  it('compareOrigin still matches format-1 headers, which carry no vault id', () => {
+    const legacy = {
+      formatVersion: 1,
+      appVersion: '0',
+      deviceId: 'A',
+      revision: 5,
+      kdf: { salt: 's', iterations: 1, hash: 'SHA-256' as const },
+      recoveryKdf: { salt: 'r', iterations: 1, hash: 'SHA-256' as const },
+      wrappedDEK: 'w',
+      wrappedDEKRecovery: 'wr',
+      namespaceIndex: 0,
+      createdAt: '',
+      updatedAt: '',
+    } as unknown as VaultHeader
+    expect(compareOrigin(legacy, { ...legacy, deviceId: 'B', revision: 9 }).sameVault).toBe(true)
+    expect(compareOrigin(legacy, { ...legacy, kdf: { salt: 'x', iterations: 1, hash: 'SHA-256' }, wrappedDEKRecovery: 'y' }).sameVault).toBe(false)
   })
 })

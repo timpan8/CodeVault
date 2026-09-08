@@ -15,12 +15,19 @@ import {
 } from '@engine/examples'
 import { createField as engineCreateField, normalizeAnchorName, validateExample, type ExampleProblem } from '@engine/fields'
 import {
+  FORMAT_VERSION,
+  addPassword as cryptoAddPassword,
   changePassword as cryptoChangePassword,
+  createUnprotectedVault,
   createVault,
   randomId,
+  removePassword as cryptoRemovePassword,
   rotateRecoveryKey as cryptoRotateRecoveryKey,
+  unlockWithLocalKey,
   unlockWithPassword,
   unlockWithRecoveryKey,
+  VaultKeyError,
+  type Protection,
   type VaultHeader,
 } from './crypto'
 import { VaultStore, type DecodedRecord } from './store'
@@ -148,32 +155,83 @@ export class VaultSession {
     password: string,
     opts: SessionOptions & { iterations?: number; deviceId?: string } = {},
   ): Promise<{ session: VaultSession; recoveryKey: string }> {
-    if (await store.exists()) throw new Error('Vault already exists')
     const now = opts.now?.() ?? new Date().toISOString()
-    const created = await createVault(password, {
-      ...(opts.iterations !== undefined ? { iterations: opts.iterations } : {}),
-      appVersion: opts.appVersion ?? '0.0.0',
-      ...(opts.deviceId ? { deviceId: opts.deviceId } : {}),
-      now,
-    })
-    await store.writeHeader(created.header)
-    const session = new VaultSession(store, created.header, created.dek, opts)
-    await session.persist('settings', 'settings', { ...DEFAULT_SETTINGS, updatedAt: now })
-    return { session, recoveryKey: created.recoveryKey }
+    const created = await VaultSession.start(store, opts, async () =>
+      createVault(password, {
+        ...(opts.iterations !== undefined ? { iterations: opts.iterations } : {}),
+        appVersion: opts.appVersion ?? '0.0.0',
+        ...(opts.deviceId ? { deviceId: opts.deviceId } : {}),
+        now,
+      }),
+    )
+    return { session: created.session, recoveryKey: created.made.recoveryKey }
   }
 
+  /** A vault with no master password: nothing to type now, `addPassword` later. */
+  static async createUnprotected(
+    store: VaultStore,
+    opts: SessionOptions & { deviceId?: string } = {},
+  ): Promise<VaultSession> {
+    const now = opts.now?.() ?? new Date().toISOString()
+    const created = await VaultSession.start(store, opts, async () =>
+      createUnprotectedVault({
+        appVersion: opts.appVersion ?? '0.0.0',
+        ...(opts.deviceId ? { deviceId: opts.deviceId } : {}),
+        now,
+      }),
+    )
+    await store.writeLocalKey(created.made.localKey)
+    return created.session
+  }
+
+  private static async start<T extends { header: VaultHeader; dek: CryptoKey }>(
+    store: VaultStore,
+    opts: SessionOptions,
+    make: () => Promise<T>,
+  ): Promise<{ session: VaultSession; made: T }> {
+    if (await store.exists()) throw new Error('Vault already exists')
+    const made = await make()
+    await store.writeHeader(made.header)
+    const session = new VaultSession(store, made.header, made.dek, opts)
+    await session.persist('settings', 'settings', { ...DEFAULT_SETTINGS, updatedAt: opts.now?.() ?? new Date().toISOString() })
+    return { session, made }
+  }
+
+  /**
+   * `secret` is ignored for an unprotected vault, which opens with the local
+   * key; pass null for it. A protected vault still needs a password or the
+   * recovery key.
+   */
   static async open(
     store: VaultStore,
-    secret: { password: string } | { recoveryKey: string },
+    secret: { password: string } | { recoveryKey: string } | null,
     opts: SessionOptions = {},
   ): Promise<VaultSession> {
     const header = await store.header()
     if (!header) throw new Error('No vault')
-    if (header.formatVersion > 1) throw new Error(`Vault format ${header.formatVersion} needs a newer app version`)
-    const dek = 'password' in secret ? await unlockWithPassword(header, secret.password) : await unlockWithRecoveryKey(header, secret.recoveryKey)
+    if (header.formatVersion > FORMAT_VERSION) throw new Error(`Vault format ${header.formatVersion} needs a newer app version`)
+    const dek = await VaultSession.openKey(store, header, secret)
     const session = new VaultSession(store, header, dek, opts)
     await session.loadAll()
     return session
+  }
+
+  private static async openKey(
+    store: VaultStore,
+    header: VaultHeader,
+    secret: { password: string } | { recoveryKey: string } | null,
+  ): Promise<CryptoKey> {
+    if (header.protection === 'none') {
+      const localKey = await store.localKey()
+      if (!localKey) throw new VaultKeyError()
+      return unlockWithLocalKey(header, localKey)
+    }
+    if (!secret) throw new VaultKeyError('Vault needs a master password')
+    const dek = 'password' in secret ? await unlockWithPassword(header, secret.password) : await unlockWithRecoveryKey(header, secret.recoveryKey)
+    // addPassword writes the header before dropping the local key; if it was cut
+    // off in between, that row still fits the records. Clear it once we are in.
+    if (await store.localKey()) await store.clearLocalKey()
+    return dek
   }
 
   private async loadAll(): Promise<void> {
@@ -197,6 +255,15 @@ export class VaultSession {
 
   get isLocked(): boolean {
     return this.dek === null
+  }
+
+  get protection(): Protection {
+    return this._header.protection
+  }
+
+  /** False while the vault opens without a secret, i.e. locking it would be theatre. */
+  get isProtected(): boolean {
+    return this._header.protection === 'password'
   }
 
   private key(): CryptoKey {
@@ -266,6 +333,34 @@ export class VaultSession {
   async changePassword(current: { password: string } | { recoveryKey: string }, newPassword: string): Promise<void> {
     this.key()
     const header = await cryptoChangePassword(this._header, current, newPassword, this.now())
+    await this.bumpHeader(header)
+    this.notify()
+  }
+
+  /**
+   * Protect an open vault with a master password. Only the header changes, so
+   * this stays instant no matter how much is stored. The local key is dropped
+   * last: until it is gone the vault is still openable without the password.
+   */
+  async addPassword(password: string, opts: { iterations?: number } = {}): Promise<string> {
+    this.key()
+    const localKey = await this.store.localKey()
+    if (!localKey) throw new VaultKeyError()
+    const { header, recoveryKey } = await cryptoAddPassword(this._header, localKey, password, {
+      ...(opts.iterations !== undefined ? { iterations: opts.iterations } : {}),
+      now: this.now(),
+    })
+    await this.bumpHeader(header)
+    await this.store.clearLocalKey()
+    this.notify()
+    return recoveryKey
+  }
+
+  /** Give up the master password; the key moves to the store beside the data. */
+  async removePassword(current: { password: string } | { recoveryKey: string }): Promise<void> {
+    this.key()
+    const { header, localKey } = await cryptoRemovePassword(this._header, current, this.now())
+    await this.store.writeLocalKey(localKey)
     await this.bumpHeader(header)
     this.notify()
   }

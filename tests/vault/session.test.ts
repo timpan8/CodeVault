@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { VaultStore } from '@vault/store'
 import { ExampleInvalidError, LockedError, VaultSession, materializeField } from '@vault/session'
+import { VaultKeyError } from '@vault/crypto'
 import { parseTemplate, render, serializeTemplate } from '@engine/template'
 
 let dbCounter = 0
@@ -154,5 +155,85 @@ describe('VaultSession', () => {
     expect(re.getSettings().rootPath).toBe('C:\\Temp')
     expect(re.snapshot(script.id).orgHostRegex?.test('SRV-01')).toBe(true)
     expect(re.listExclusions(script.id)).toHaveLength(1)
+  })
+
+  it('an unprotected vault reopens with no secret', async () => {
+    const store = newStore()
+    const now = clock()
+    const session = await VaultSession.createUnprotected(store, { now })
+    expect(session.isProtected).toBe(false)
+    const script = await session.createScript({ title: 'AD sync' })
+    await session.createField({ name: 'SVC_PW', kind: 'password', real: 'Sommar2024!' })
+    expect(await store.localKey()).toBeTruthy()
+    session.lock()
+
+    const re = await VaultSession.open(store, null, { now })
+    expect(re.listScripts().map((s) => s.title)).toEqual(['AD sync'])
+    expect(re.snapshot(script.id).real.get(re.listFields()[0]!.id)).toBe('Sommar2024!')
+    // records are still ciphertext on disk; the key is simply stored beside them
+    const raw = await store.allRaw()
+    expect(raw.length).toBeGreaterThan(0)
+    for (const row of raw) expect(row.payload).not.toContain('Sommar2024!')
+  })
+
+  it('addPassword protects an open vault, removePassword gives the protection up again', async () => {
+    const store = newStore()
+    const now = clock()
+    const session = await VaultSession.createUnprotected(store, { now })
+    await session.createScript({ title: 'AD sync' })
+
+    const recoveryKey = await session.addPassword('hunter2-correct', { iterations: ITER })
+    expect(recoveryKey).toMatch(/^[0-9a-f]{32}$/)
+    expect(session.isProtected).toBe(true)
+    expect(await store.localKey()).toBeUndefined()
+    session.lock()
+
+    await expect(VaultSession.open(store, null, { now })).rejects.toBeInstanceOf(VaultKeyError)
+    const locked = await VaultSession.open(store, { password: 'hunter2-correct' }, { now })
+    expect(locked.listScripts().map((s) => s.title)).toEqual(['AD sync'])
+
+    await locked.removePassword({ password: 'hunter2-correct' })
+    expect(locked.isProtected).toBe(false)
+    expect(await store.localKey()).toBeTruthy()
+    locked.lock()
+    const open = await VaultSession.open(store, null, { now })
+    expect(open.listScripts().map((s) => s.title)).toEqual(['AD sync'])
+  })
+
+  it('opening a protected vault clears a local key an interrupted addPassword left behind', async () => {
+    const store = newStore()
+    const now = clock()
+    const session = await VaultSession.createUnprotected(store, { now })
+    await session.createScript({ title: 'AD sync' })
+    const stranded = (await store.localKey())!
+    await session.addPassword('hunter2-correct', { iterations: ITER })
+    // replay the crash: the header says 'password' but the old key row survived
+    await store.writeLocalKey(stranded)
+    session.lock()
+
+    // the key is never used to get in, and it is gone once the password has been
+    const re = await VaultSession.open(store, { password: 'hunter2-correct' }, { now })
+    expect(re.listScripts()).toHaveLength(1)
+    expect(await store.localKey()).toBeUndefined()
+  })
+
+  it('a wrong password leaves a stranded local key alone', async () => {
+    const store = newStore()
+    const now = clock()
+    const session = await VaultSession.createUnprotected(store, { now })
+    const stranded = (await store.localKey())!
+    await session.addPassword('hunter2-correct', { iterations: ITER })
+    await store.writeLocalKey(stranded)
+    session.lock()
+    await expect(VaultSession.open(store, { password: 'wrong' }, { now })).rejects.toBeTruthy()
+    expect(await store.localKey()).toBe(stranded)
+  })
+
+  it('a second vault cannot be created over an existing one, protected or not', async () => {
+    const store = newStore()
+    const now = clock()
+    await VaultSession.createUnprotected(store, { now })
+    await expect(VaultSession.createUnprotected(store, { now })).rejects.toThrow(/already exists/)
+    await expect(VaultSession.create(store, 'pw', { iterations: ITER, now })).rejects.toThrow(/already exists/)
   })
 })
