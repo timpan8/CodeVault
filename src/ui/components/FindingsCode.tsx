@@ -127,7 +127,7 @@ export function FindingsCode(props: FindingsCodeProps) {
         },
       }),
       EditorView.theme({
-        '&': { fontFamily: 'var(--cv-mono)', fontSize: '13px', height: '100%' },
+        '&': { fontFamily: 'var(--cv-mono)', fontSize: '13px' },
         '.cm-scroller': { fontFamily: 'var(--cv-mono)', overflow: 'auto' },
         '.cm-content': { caretColor: 'transparent' },
         '&.cm-focused': { outline: 'none' },

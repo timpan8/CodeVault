@@ -193,12 +193,10 @@ a { color: var(--cv-accent); }
 .cv-review-codepane { position: sticky; top: 0; min-width: 0; }
 @media (max-width: 1180px) { .cv-review-codepane { position: static; } }
 .cv-review-nav { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.35rem; }
-.cv-review-code {
-  height: min(58vh, 600px); overflow: hidden;
-  border: 1px solid var(--cv-border); border-radius: 8px; background: var(--cv-panel);
-}
-@media (max-width: 1180px) { .cv-review-code { height: 300px; } }
-.cv-review-code .cm-editor { height: 100%; }
+.cv-review-code { border: 1px solid var(--cv-border); border-radius: 8px; overflow: hidden; background: var(--cv-panel); }
+/* Grows with the code and stops there, so a five-line paste is five lines tall. */
+.cv-review-code .cm-editor { max-height: min(58vh, 600px); }
+@media (max-width: 1180px) { .cv-review-code .cm-editor { max-height: 300px; } }
 .cv-review-list { min-width: 0; max-height: min(64vh, 660px); overflow: auto; }
 
 /* Findings in the code read as the same colours as the row borders in the list. */
@@ -249,6 +247,7 @@ a { color: var(--cv-accent); }
 .cv-values .cv-card { max-width: 900px; }
 .cv-values h4 { margin: 0.9rem 0 0.3rem; }
 .cv-values .cv-table td { vertical-align: top; }
+.cv-values .cv-table td.cv-row-actions { margin-top: 0; }
 .cv-preset-form { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--cv-border); }
 .cv-reveal { display: inline-flex; align-items: center; gap: 0.3rem; background: var(--cv-warn-bg); border: 1px solid var(--cv-warn); border-radius: 4px; padding: 0 0.2rem; }
 .cv-reveal-count { font-size: 0.75rem; color: var(--cv-muted); }
