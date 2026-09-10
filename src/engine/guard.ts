@@ -18,7 +18,7 @@
 import { lex, lexPlain, type Token } from './lexer/powershell'
 import { matchRuleFor } from './fields'
 import { base64Runs, decodeBase64Variants, encodedVariants, shannonEntropy } from './encoding'
-import { DEFAULT_NAMESPACE, isInExampleNamespace, type ExampleNamespace } from './examples'
+import { DEFAULT_NAMESPACE, isInExampleNamespace, isToolExample, knownExamples, type ExampleNamespace } from './examples'
 import {
   ANY_IP_RE,
   EMAIL_RE,
@@ -224,6 +224,9 @@ function dedupe(findings: GuardFinding[]): GuardFinding[] {
 
 function pass2(text: string, tokens: readonly Token[], input: GuardInput): GuardFinding[] {
   const ns = input.ns ?? DEFAULT_NAMESPACE
+  // A chosen example value sits outside the reserved namespace. Without this the
+  // guard would flag the tool's own sanitised output and refuse to copy it.
+  const known = knownExamples(input.fields)
   const findings: GuardFinding[] = []
   const add = (tok: Token, kind: FieldKind | undefined, reason: string, span?: { start: number; end: number }) => {
     const start = span?.start ?? tok.contentStart ?? tok.start
@@ -245,7 +248,7 @@ function pass2(text: string, tokens: readonly Token[], input: GuardInput): Guard
     // comments: scan words inside for emails/UNC/IPs
     const words = tok.kind === 'comment' ? raw.split(/[\s,;()]+/).filter((w) => w.length >= 4) : [raw.trim()]
     for (const v of words) {
-      if (v.length < 4 || isInExampleNamespace(v, ns)) continue
+      if (v.length < 4 || isToolExample(v, ns, known)) continue
       const bindKind = tok.binding ? kindFromBindingName(tok.binding.name) : undefined
       const cmd = tok.command?.toLowerCase()
       if (UNC_RE.test(v)) {

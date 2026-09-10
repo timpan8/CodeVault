@@ -5,7 +5,7 @@
  */
 import type { Token } from './lexer/powershell'
 import type { FieldKind } from './types'
-import { DEFAULT_NAMESPACE, isInExampleNamespace, type ExampleNamespace } from './examples'
+import { DEFAULT_NAMESPACE, isToolExample, type ExampleNamespace } from './examples'
 
 export const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/
 export const GUID_RE = /^\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?$/i
@@ -162,6 +162,12 @@ export interface DetectorOptions {
   /** Organisation host-name pattern, e.g. /^(SRV|DC|FS)-/i */
   orgHostRegex?: RegExp
   language?: 'powershell' | 'plain'
+  /**
+   * Lower-cased example values and aliases the vault already owns. Chosen
+   * example values sit outside the reserved namespace, so without this the
+   * detector would offer the tool's own fakes as candidates on every paste.
+   */
+  knownExamples?: ReadonlySet<string>
 }
 
 function span(tok: Token): { start: number; end: number } {
@@ -175,7 +181,7 @@ export function detectCandidates(tokens: readonly Token[], opts: DetectorOptions
     if (tok.kind !== 'string' && tok.kind !== 'bareword' && tok.kind !== 'number') continue
     const v = (tok.logical ?? '').trim()
     if (v.length < 3 || VALUE_STOPLIST.has(v.toLowerCase())) continue
-    if (isInExampleNamespace(v, ns)) continue
+    if (isToolExample(v, ns, opts.knownExamples)) continue
     if (v.startsWith('$') || v.startsWith('@')) continue
     const hit = classify(tok, v, opts)
     if (hit) hits.push({ tok, ...span(tok), literal: v, ...hit })

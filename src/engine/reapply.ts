@@ -16,7 +16,7 @@ import {
   kindFromBindingName,
   type DetectorOptions,
 } from './detectors'
-import { DEFAULT_NAMESPACE, isInExampleNamespace, type ExampleNamespace } from './examples'
+import { DEFAULT_NAMESPACE, isToolExample, knownExamples, type ExampleNamespace } from './examples'
 import { base64Runs, decodeBase64Variants, shannonEntropy } from './encoding'
 import type { Field, FieldAlias, FieldKind, QuoteKind, Segment, SlotStatus } from './types'
 
@@ -277,6 +277,9 @@ export function reapply(input: ReapplyInput): ReapplyResult {
   const ns = input.ns ?? DEFAULT_NAMESPACE
   const ownIds = new Set(input.fields.map((f) => f.id))
   const allFields = [...input.fields, ...(input.otherFields ?? [])].filter((f) => !f.tombstone)
+  // Values the vault claims as fakes. Chosen example values sit outside the
+  // reserved namespace, so the namespace test alone would report them as new.
+  const known = knownExamples(allFields)
   const fieldMap = new Map(allFields.map((f) => [f.id, f]))
   const pathFields = allFields.filter((f) => f.kind === 'path' || f.kind === 'unc')
   const isParentPath = (f: Field) =>
@@ -446,7 +449,7 @@ export function reapply(input: ReapplyInput): ReapplyResult {
   }
 
   // (d) detectors: new fields, never auto
-  const detectorOpts: DetectorOptions = { ns, ...(input.orgHostRegex ? { orgHostRegex: input.orgHostRegex } : {}), language }
+  const detectorOpts: DetectorOptions = { ns, ...(input.orgHostRegex ? { orgHostRegex: input.orgHostRegex } : {}), language, knownExamples: known }
   const detectorHits = detectCandidates(tokens, detectorOpts)
   for (const hit of detectorHits) {
     if (cands.some((c) => c.tok === hit.tok)) continue
@@ -562,7 +565,7 @@ export function reapply(input: ReapplyInput): ReapplyResult {
   // editor mode: unknown real-looking values
   let unknown: UnknownValue[] = []
   if (input.mode === 'editor') {
-    unknown = scanUnknown(vtoks, accepted, allFields, input.real, ns, detectorHits)
+    unknown = scanUnknown(vtoks, accepted, allFields, input.real, ns, detectorHits, known)
     // detector candidates with conf >= 0.4 are unknown real values here, not blue candidates
     for (let i = accepted.length - 1; i >= 0; i--) {
       const c = accepted[i]!
@@ -689,6 +692,7 @@ function scanUnknown(
   real: ReadonlyMap<string, string> | undefined,
   ns: ExampleNamespace,
   detectorHits: ReturnType<typeof detectCandidates>,
+  known: ReadonlySet<string>,
 ): UnknownValue[] {
   const out: UnknownValue[] = []
   const suffixes = new Set<string>()
@@ -707,7 +711,7 @@ function scanUnknown(
     const span = { start: tok.contentStart ?? tok.start, end: tok.contentEnd ?? tok.end }
     if (accepted.some((a) => a.fieldId !== null && overlaps(a, span))) continue
     const v = (tok.logical ?? '').trim()
-    if (v.length < 3 || isInExampleNamespace(v, ns)) continue
+    if (v.length < 3 || isToolExample(v, ns, known)) continue
     const reasons: string[] = []
     const det = detectorHits.find((h) => h.tok === tok)
     const lower = v.toLowerCase()
