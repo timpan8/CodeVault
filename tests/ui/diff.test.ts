@@ -1,7 +1,9 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { diffDoc, diffStats, formatStats, markersToExamples } from '@ui/diff'
-import { directoryPart, trimPathRow } from '@ui/review'
+import { buildVersion, directoryPart, initialRows, trimPathRow } from '@ui/review'
+import { reapply } from '@engine/reapply'
+import type { Field } from '@engine/types'
 import { createField } from '@engine/fields'
 import { parseTemplate } from '@engine/template'
 import { VaultStore } from '@vault/store'
@@ -63,5 +65,47 @@ describe('derived fields', () => {
     expect(session.realValue(proj.id)).toBe('D:\\Scripts\\AdSync')
     expect(session.snapshot().real.get(proj.id)).toBe('D:\\Scripts\\AdSync')
     expect(session.findFieldByRealValue('D:\\Scripts\\AdSync')?.id).toBe(proj.id)
+  })
+})
+
+/**
+ * What the review step's "Ändringar" tab shows: the version the current
+ * decisions would produce, against the one before it. Driven by buildVersion,
+ * so it moves as decisions move.
+ */
+describe('live diff of the pending version', () => {
+  const mk = (id: string, kind: Field['kind'], example: string): Field =>
+    createField({ id, name: id.toUpperCase(), kind, example, now: NOW })
+
+  const fields = [mk('user', 'username', 'svc-example01'), mk('pw', 'password', 'Ex@mple-Passw0rd-1')]
+  const fieldMap = new Map(fields.map((f) => [f.id, f]))
+  const real = new Map([['user', 'svc-adsync'], ['pw', 'Sommar2024!']])
+  const paste = "$u = 'svc-example01'\n$p = 'Ex@mple-Passw0rd-1'\n"
+
+  const pending = (mutate: (rows: ReturnType<typeof initialRows>) => ReturnType<typeof initialRows> = (r) => r) => {
+    const result = reapply({ text: paste, fields, real, mode: 'ai' })
+    const rows = mutate(initialRows(result))
+    const built = buildVersion(paste, rows, result.missing, new Set(), fieldMap, NOW)
+    return diffDoc(built.segments, fieldMap)
+  }
+
+  it('an unchanged paste diffs to nothing against the version it came from', () => {
+    const next = pending()
+    expect(diffStats(next, next)).toMatchObject({ added: 0, removed: 0 })
+    // Fields are atomic markers, so no real value can be in either document.
+    expect(next).toContain('⟦PW⟧')
+    expect(next).not.toContain('Sommar2024!')
+    expect(next).not.toContain('Ex@mple-Passw0rd-1')
+  })
+
+  it('rejecting a finding changes the document, which is what makes it live', () => {
+    const accepted = pending()
+    const rejected = pending((rows) => rows.map((r) => (r.fieldId === 'pw' ? { ...r, decision: 'reject' as const } : r)))
+    expect(rejected).not.toBe(accepted)
+    // The rejected slot stays plain text: the example value, never the real one.
+    expect(rejected).not.toContain('⟦PW⟧')
+    expect(rejected).toContain('Ex@mple-Passw0rd-1')
+    expect(rejected).not.toContain('Sommar2024!')
+    expect(diffStats(accepted, rejected).added).toBeGreaterThan(0)
   })
 })

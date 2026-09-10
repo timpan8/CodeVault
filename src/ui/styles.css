@@ -173,7 +173,42 @@ a { color: var(--cv-accent); }
 .cv-group { margin: 0.75rem 0; }
 .cv-group summary { cursor: pointer; }
 .cv-group summary h4 { display: inline; }
-.cv-review-summary { display: flex; gap: 1rem; align-items: center; font-weight: 600; margin: 0.5rem 0; }
+.cv-review-summary { display: flex; gap: 1rem; align-items: center; font-weight: 600; margin: 0.5rem 0; flex-wrap: wrap; }
+
+.cv-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--cv-border); margin-top: 0.5rem; }
+.cv-tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; color: var(--cv-muted);
+  font: inherit; padding: 0.4rem 0.7rem; cursor: pointer;
+}
+.cv-tab:hover { color: inherit; }
+.cv-tab-active { color: inherit; font-weight: 600; border-bottom-color: var(--cv-accent); }
+.cv-review-diff { margin-top: 0.6rem; }
+
+/* One column by default, two only where there is room for them. */
+.cv-review-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; align-items: start; }
+/* display:grid would win over the UA rule for [hidden]. */
+.cv-review-split[hidden] { display: none; }
+.cv-modal-xwide .cv-review-split { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+@media (max-width: 1180px) { .cv-modal-xwide .cv-review-split { grid-template-columns: minmax(0, 1fr); } }
+.cv-review-codepane { position: sticky; top: 0; min-width: 0; }
+@media (max-width: 1180px) { .cv-review-codepane { position: static; } }
+.cv-review-nav { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.cv-review-code { border: 1px solid var(--cv-border); border-radius: 8px; overflow: hidden; background: var(--cv-panel); }
+/* Grows with the code and stops there, so a five-line paste is five lines tall. */
+.cv-review-code .cm-editor { max-height: min(58vh, 600px); }
+@media (max-width: 1180px) { .cv-review-code .cm-editor { max-height: 300px; } }
+.cv-review-list { min-width: 0; max-height: min(64vh, 660px); overflow: auto; }
+
+/* Findings in the code read as the same colours as the row borders in the list. */
+.cv-find { border-radius: 3px; box-shadow: inset 0 -2px 0 currentColor; }
+.cv-find-auto { background: var(--cv-ok-bg); color: var(--cv-ok); }
+.cv-find-confirm { background: var(--cv-warn-bg); color: var(--cv-warn); }
+.cv-find-candidate { background: var(--cv-info-bg); color: var(--cv-accent); }
+.cv-find-unknown { background: var(--cv-error-bg); color: var(--cv-danger); }
+.cv-find-rejected { background: transparent; color: var(--cv-muted); opacity: 0.7; }
+.cv-find-masked { font-family: var(--cv-mono); letter-spacing: 0.05em; }
+.cv-find-active { outline: 2px solid var(--cv-accent); outline-offset: 1px; border-radius: 3px; }
+.cv-row-active { box-shadow: 0 0 0 2px var(--cv-accent); }
 
 .cv-script { display: grid; grid-template-columns: 260px minmax(0, 1fr) 300px; height: 100%; }
 .cv-col { min-height: 0; overflow: auto; }
@@ -212,6 +247,7 @@ a { color: var(--cv-accent); }
 .cv-values .cv-card { max-width: 900px; }
 .cv-values h4 { margin: 0.9rem 0 0.3rem; }
 .cv-values .cv-table td { vertical-align: top; }
+.cv-values .cv-table td.cv-row-actions { margin-top: 0; }
 .cv-preset-form { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--cv-border); }
 .cv-reveal { display: inline-flex; align-items: center; gap: 0.3rem; background: var(--cv-warn-bg); border: 1px solid var(--cv-warn); border-radius: 4px; padding: 0 0.2rem; }
 .cv-reveal-count { font-size: 0.75rem; color: var(--cv-muted); }
@@ -230,6 +266,7 @@ a { color: var(--cv-accent); }
 .cv-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: flex-start; justify-content: center; padding: 3rem 1rem; overflow: auto; z-index: 50; }
 .cv-modal { background: var(--cv-panel); border: 1px solid var(--cv-border); border-radius: 10px; width: 560px; max-width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
 .cv-modal-wide { width: 960px; }
+.cv-modal-xwide { width: min(1360px, calc(100vw - 2rem)); }
 .cv-modal-danger { border-color: var(--cv-danger); }
 .cv-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--cv-border); }
 .cv-modal-header h2 { margin: 0; font-size: 1.05rem; }

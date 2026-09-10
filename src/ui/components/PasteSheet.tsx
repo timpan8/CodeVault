@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks'
+import { useMemo, useState } from 'preact/hooks'
 import type { NormalizedPaste } from '@engine/normalize'
 import { learnFromAccepted, lineFingerprint, type MissingField, type ReapplyResult, type SlotProposal } from '@engine/reapply'
 import { contentHash } from '@engine/template'
@@ -6,13 +6,20 @@ import { kindMasksByDefault, masksByDefault } from '@engine/fields'
 import type { FieldRecord } from '@vault/model'
 import { engine, getSession, toast, useTick } from '../state'
 import { buildVersion, groupRows, initialRows, trimPathRow, type ReviewRow } from '../review'
+import { findingIndex, findingsOf, stepFinding } from '../findings'
+import { FindingsCode } from './FindingsCode'
+import { useShortcut } from '../keys'
 import { diffDoc, diffStats, formatStats } from '../diff'
+import { ReviewDiff } from './ReviewDiff'
 import { kindLabel, mask, suggestTitle } from '../format'
 import { FieldForm } from './FieldForm'
 import { Modal } from './Modal'
 import { t, type StringKey } from '@i18n/index'
 
 type Step = 'paste' | 'blocks' | 'review'
+
+/** The preview build's timestamps are discarded; only its segments are used. */
+const PREVIEW_NOW = '1970-01-01T00:00:00.000Z'
 type Mode = 'ai' | 'editor'
 
 export function PasteSheet(props: {
@@ -21,7 +28,7 @@ export function PasteSheet(props: {
   onDone: (scriptId: string, versionId: string) => void
   onCancel: () => void
 }) {
-  useTick()
+  const tick = useTick()
   const session = getSession()
   const script = props.scriptId ? session.getScript(props.scriptId) : undefined
   const [raw, setRaw] = useState('')
@@ -43,6 +50,8 @@ export function PasteSheet(props: {
   const [directionPrompt, setDirectionPrompt] = useState(false)
   const [duplicateOf, setDuplicateOf] = useState<number | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [tab, setTab] = useState<'findings' | 'changes'>('findings')
 
   const updateRow = (id: string, patch: Partial<ReviewRow>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
   /** Resolve a row to a field; path fields cover the directory prefix only. */
@@ -118,6 +127,8 @@ export function PasteSheet(props: {
     setText(body)
     setResult(res)
     setRows(initialRows(res))
+    setActiveId(null)
+    setTab('findings')
     setMissingAck(new Set())
     setMode(m)
     if (!props.scriptId && !title) setTitle(suggestTitle(body))
@@ -264,7 +275,7 @@ export function PasteSheet(props: {
     const p = row.proposal!
     const field = row.fieldId ? session.getField(row.fieldId) : undefined
     return (
-      <li class={`cv-row cv-row-${p.status} ${row.decision === 'reject' ? 'cv-row-rejected' : ''}`}>
+      <li class={`cv-row cv-row-${p.status} ${row.decision === 'reject' ? 'cv-row-rejected' : ''} ${row.id === activeId ? 'cv-row-active' : ''}`} onClick={() => setActiveId(row.id)}>
         <div class="cv-row-main">
           <span class="cv-row-line">{t('common.line', { n: p.line + 1 })}</span>
           <code class="cv-row-literal">{literalOf(row)}</code>
@@ -291,7 +302,7 @@ export function PasteSheet(props: {
   const UnknownRow = ({ row }: { row: ReviewRow }) => {
     const u = row.unknown!
     return (
-      <li class={`cv-row cv-row-unknown ${row.decision !== 'pending' ? 'cv-row-decided' : ''}`}>
+      <li class={`cv-row cv-row-unknown ${row.decision !== 'pending' ? 'cv-row-decided' : ''} ${row.id === activeId ? 'cv-row-active' : ''}`} onClick={() => setActiveId(row.id)}>
         <div class="cv-row-main">
           <span class="cv-row-line">{t('common.line', { n: u.line + 1 })}</span>
           <code class="cv-row-literal">{literalOf(row)}</code>
@@ -351,6 +362,28 @@ export function PasteSheet(props: {
       </li>
     )
   }
+
+  // From rows, never from result: trimPathRow shrinks a proposal when a row is
+  // linked to a path field, and the highlight has to shrink with it.
+  const findings = useMemo(() => findingsOf(rows, isSecretRow, text.length), [rows, text])
+
+  // fieldMap() hands back a fresh Map every call, so it has to be memoised or
+  // every memo below it recomputes on each keystroke in the note field.
+  const fieldMap = useMemo(() => session.fieldMap(), [tick])
+  const prevVersion = props.scriptId ? session.latestVersion(props.scriptId) : undefined
+  const prevDoc = useMemo(() => (prevVersion ? diffDoc(prevVersion.segments, fieldMap) : ''), [prevVersion, fieldMap])
+  const nextDoc = useMemo(() => {
+    if (!result) return ''
+    // Only the segments are wanted; save() builds its own with a real timestamp,
+    // because this build's reviewLog entries would carry a frozen one.
+    const built = buildVersion(text, rows, result.missing, missingAck, fieldMap, PREVIEW_NOW)
+    return diffDoc(built.segments, fieldMap)
+  }, [text, rows, result, missingAck, fieldMap])
+  const pendingStats = useMemo(() => (prevVersion ? diffStats(prevDoc, nextDoc) : null), [prevDoc, nextDoc, prevVersion])
+  const goToFinding = (delta: 1 | -1) => setActiveId(stepFinding(findings, activeId, delta))
+  const inReview = step === 'review'
+  useShortcut('alt+arrowdown', () => goToFinding(1), inReview && findings.length > 0)
+  useShortcut('alt+arrowup', () => goToFinding(-1), inReview && findings.length > 0)
 
   const rowForForm = fieldFormFor ? rows.find((r) => r.id === fieldFormFor) : undefined
   const rowForLink = linkFor ? rows.find((r) => r.id === linkFor) : undefined
@@ -451,8 +484,19 @@ export function PasteSheet(props: {
               </div>
             </div>
           )}
+          {prevVersion && (
+            <div class="cv-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected={tab === 'findings'} class={`cv-tab ${tab === 'findings' ? 'cv-tab-active' : ''}`} onClick={() => setTab('findings')}>
+                {t('paste.tabFindings')}
+              </button>
+              <button type="button" role="tab" aria-selected={tab === 'changes'} class={`cv-tab ${tab === 'changes' ? 'cv-tab-active' : ''}`} onClick={() => setTab('changes')}>
+                {t('paste.tabDiff', { seq: prevVersion.seq })}
+              </button>
+            </div>
+          )}
           <div class="cv-review-summary">
             {t('paste.summary', { auto: groups.auto.length, confirm: groups.confirm.length, candidate: groups.candidate.length, missing: result.missing.length, unknown: groups.unknown.length })}
+            {pendingStats && <span class="cv-chip">{t('diff.stats', { added: pendingStats.added, removed: pendingStats.removed })}</span>}
             {groups.confirm.some((r) => r.decision === 'pending' && r.fieldId) && (
               <button type="button" class="cv-btn cv-btn-small" onClick={() => setRows((rs) => rs.map((r) => (r.kind === 'slot' && r.proposal!.status === 'auto' ? { ...r, decision: 'accept' } : r)))}>
                 {t('paste.acceptAllGreen')}
@@ -460,6 +504,38 @@ export function PasteSheet(props: {
             )}
           </div>
 
+          {tab === 'changes' && prevVersion && <ReviewDiff prevDoc={prevDoc} nextDoc={nextDoc} prevSeq={prevVersion.seq} />}
+
+          <div class="cv-review-split" hidden={tab === 'changes'}>
+            <div class="cv-review-codepane">
+              <div class="cv-review-nav">
+                <strong>{t('paste.codePane')}</strong>
+                {findings.length === 0 ? (
+                  <span class="cv-muted cv-small">{t('paste.noFindings')}</span>
+                ) : (
+                  <>
+                    <button type="button" class="cv-btn cv-btn-small" onClick={() => goToFinding(-1)} title="Alt+Upp">
+                      ◀ {t('paste.prevFinding')}
+                    </button>
+                    <span class="cv-muted cv-small">{t('paste.findingCounter', { i: findingIndex(findings, activeId), n: findings.length })}</span>
+                    <button type="button" class="cv-btn cv-btn-small" onClick={() => goToFinding(1)} title="Alt+Ner">
+                      {t('paste.nextFinding')} ▶
+                    </button>
+                  </>
+                )}
+              </div>
+              <FindingsCode
+                text={text}
+                marks={findings}
+                activeId={activeId}
+                language={language}
+                onSelect={setActiveId}
+                onCopyBlocked={() => toast(t('paste.codeCopyBlocked'), 'warn')}
+              />
+              {findings.some((f) => f.masked) && <p class="cv-hint">{t('paste.codeMasked')}</p>}
+            </div>
+
+            <div class="cv-review-list">
           {groups.unknown.length > 0 && (
             <section class="cv-group cv-group-unknown">
               <h4>{t('paste.groupUnknown', { n: groups.unknown.length })}</h4>
@@ -490,10 +566,18 @@ export function PasteSheet(props: {
             </summary>
             <ul class="cv-list">{groups.auto.map((r) => <SlotRow key={r.id} row={r} />)}</ul>
           </details>
+            </div>
+          </div>
 
           <label class="cv-label">
             {t('paste.note')}
-            <input class="cv-input" value={note} onInput={(e) => setNote((e.currentTarget as HTMLInputElement).value)} spellcheck={false} />
+            <input
+              class="cv-input"
+              value={note}
+              onInput={(e) => setNote((e.currentTarget as HTMLInputElement).value)}
+              placeholder={pendingStats ? formatStats(pendingStats) : ''}
+              spellcheck={false}
+            />
           </label>
           <div class="cv-actions">
             <button type="button" class="cv-btn cv-btn-primary" onClick={() => void save()} disabled={busy}>
