@@ -76,6 +76,9 @@ export function FieldForm(props: {
   )
   const outsideNamespace = example.trim() !== '' && exampleProblems.length === 0 && !isInExampleNamespace(example, namespace)
 
+  /** Saved library values of this kind, offered as a pick-list. */
+  const presets = useMemo(() => session.listPresets(kind), [kind])
+
   const duplicate = useMemo(() => {
     if (!real || editing) return undefined
     const f = session.findFieldByRealValue(real)
@@ -228,6 +231,27 @@ export function FieldForm(props: {
               >
                 {t('field.exampleGenerate')}
               </button>
+              {presets.length > 0 && (
+                <select
+                  class="cv-input cv-input-small"
+                  value=""
+                  onChange={(e) => {
+                    const picked = (e.currentTarget as HTMLSelectElement).value
+                    if (!picked) return
+                    setExampleTouched(true)
+                    setExample(picked)
+                    e.currentTarget.value = ''
+                  }}
+                  aria-label={t('field.exampleFromLibrary')}
+                >
+                  <option value="">{t('field.exampleFromLibrary')}</option>
+                  {presets.map((p) => (
+                    <option value={p.value} key={p.id}>
+                      {p.name} — {p.value}
+                    </option>
+                  ))}
+                </select>
+              )}
               {props.initial.exampleFromCode && props.initial.exampleFromCode !== example && (
                 <button
                   type="button"

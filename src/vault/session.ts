@@ -37,6 +37,7 @@ import {
   type AllowlistRecord,
   type ExclusionRecord,
   type FieldRecord,
+  type PresetRecord,
   type RecordType,
   type RetiredRecord,
   type ScriptRecord,
@@ -142,6 +143,7 @@ export class VaultSession {
   private retired = new Map<string, RetiredRecord>()
   private allowlist = new Map<string, AllowlistRecord>()
   private exclusions = new Map<string, ExclusionRecord>()
+  private presets = new Map<string, PresetRecord>()
   private settings: SettingsRecord = { ...DEFAULT_SETTINGS }
   private listeners = new Set<() => void>()
   changedSinceBackup = false
@@ -249,6 +251,7 @@ export class VaultSession {
     for (const r of await load<RetiredRecord>('retired')) this.retired.set(r.id, r.data)
     for (const r of await load<AllowlistRecord>('allowlist')) this.allowlist.set(r.id, r.data)
     for (const r of await load<ExclusionRecord>('exclusion')) this.exclusions.set(r.id, r.data)
+    for (const r of await load<PresetRecord>('preset')) this.presets.set(r.id, r.data)
     const settings = await this.store.getRecord<SettingsRecord>(dek, 'settings', 'settings')
     if (settings) this.settings = { ...DEFAULT_SETTINGS, ...settings.data }
   }
@@ -298,6 +301,7 @@ export class VaultSession {
     this.retired.clear()
     this.allowlist.clear()
     this.exclusions.clear()
+    this.presets.clear()
     this.settings = { ...DEFAULT_SETTINGS }
     this.notify()
   }
@@ -769,6 +773,45 @@ export class VaultSession {
     return rec
   }
 
+  // ---- presets -----------------------------------------------------------
+
+  listPresets(kind?: Field['kind']): PresetRecord[] {
+    this.key()
+    return [...this.presets.values()]
+      .filter((p) => kind === undefined || p.kind === kind)
+      .sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
+  }
+
+  /**
+   * What is wrong with a library value. Deliberately not checked against other
+   * fields' examples: a preset is a candidate, and the whole point of saving one
+   * is that a field already uses it. Two fields sharing an example is caught
+   * where it matters, when a field adopts the value. Real values are checked —
+   * a library entry that collides with one is the last thing to hand out.
+   */
+  validatePresetValue(value: string, kind: Field['kind']): ExampleProblem[] {
+    this.key()
+    return validateExample(value, { kind, otherExamples: [], realValues: this.allRealValues() })
+  }
+
+  async createPreset(input: { name: string; kind: Field['kind']; value: string }): Promise<PresetRecord> {
+    this.key()
+    const problems = this.validatePresetValue(input.value, input.kind)
+    if (problems.length) throw new ExampleInvalidError(problems)
+    const existing = [...this.presets.values()].find((p) => p.kind === input.kind && p.value.toLowerCase() === input.value.toLowerCase())
+    if (existing) return existing
+    const now = this.now()
+    const rec: PresetRecord = { id: randomId(), name: input.name.trim() || input.value, kind: input.kind, value: input.value, createdAt: now, updatedAt: now }
+    this.presets.set(rec.id, rec)
+    await this.persist('preset', rec.id, rec)
+    return rec
+  }
+
+  async deletePreset(id: string): Promise<void> {
+    if (!this.presets.delete(id)) return
+    await this.remove(id)
+  }
+
   // ---- settings ----------------------------------------------------------
 
   getSettings(): SettingsRecord {
@@ -828,7 +871,7 @@ export class VaultSession {
   async allDecoded(): Promise<DecodedRecord[]> {
     const dek = this.key()
     const out: DecodedRecord[] = []
-    for (const type of ['script', 'version', 'field', 'retired', 'allowlist', 'exclusion', 'settings'] as RecordType[]) {
+    for (const type of ['script', 'version', 'field', 'retired', 'allowlist', 'exclusion', 'preset', 'settings'] as RecordType[]) {
       out.push(...(await this.store.listRecords(dek, type)))
     }
     return out
@@ -846,6 +889,7 @@ export class VaultSession {
     this.retired.clear()
     this.allowlist.clear()
     this.exclusions.clear()
+    this.presets.clear()
     await this.loadAll()
     this.changedSinceBackup = true
     this.notify()
@@ -860,6 +904,7 @@ export class VaultSession {
       retired: this.retired.size,
       allowlist: this.allowlist.size,
       exclusion: this.exclusions.size,
+      preset: this.presets.size,
     }
   }
 }

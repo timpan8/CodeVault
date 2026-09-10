@@ -151,6 +151,27 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   await expect.poll(() => readClipboard(page)).toContain('$AdminPassword')
   expect(await readClipboard(page)).not.toContain(REAL_PW)
 
+  // --- the Värden page: three lists, and the preset library feeds the field form
+  await page.getByRole('button', { name: 'Värden' }).click()
+  const personal = page.locator('.cv-card', { has: page.getByRole('heading', { name: 'Mina personliga värden' }) })
+  await expect(personal).toContainText('SVC_USER')
+  await expect(personal).toContainText(REAL_SERVER)
+  await expect(personal).not.toContainText(REAL_PW)
+
+  const ai = page.locator('.cv-card', { has: page.getByRole('heading', { name: 'Värden AI:n kan ta emot' }) })
+  await expect(ai).toContainText(CHOSEN_EXAMPLE)
+  await expect(ai).not.toContainText(REAL_PW)
+  await expect(ai).not.toContainText(REAL_SERVER)
+  // Save one of the examples in use into the library.
+  await ai.locator('.cv-row', { hasText: CHOSEN_EXAMPLE }).getByRole('button', { name: 'Spara i biblioteket' }).click()
+  await expect(ai.locator('.cv-row', { hasText: CHOSEN_EXAMPLE })).toHaveCount(2)
+
+  const universal = page.locator('.cv-card', { has: page.getByRole('heading', { name: 'Universella värden' }) })
+  await expect(universal).toContainText('DC')
+
+  await page.getByRole('button', { name: 'Skript' }).click()
+  await page.locator('.cv-script-row').click()
+
   // --- locking is off until the vault is given a password
   await page.keyboard.press('Control+Shift+L')
   await expect(page.getByRole('heading', { name: 'Lås upp valvet' })).toHaveCount(0)

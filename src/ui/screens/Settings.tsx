@@ -4,11 +4,11 @@ import { planIsEmpty, planMerge, type MergePlan } from '@vault/merge'
 import { VaultSession } from '@vault/session'
 import { WrongPasswordError, formatRecoveryKey } from '@vault/crypto'
 import type { FieldKind } from '@engine/types'
-import { APP_VERSION, getSession, setSession, startAutoLock, store, toast, useTick } from '../state'
+import { APP_VERSION, getSession, navigate, setSession, startAutoLock, store, toast, useTick } from '../state'
 import { chooseBackupDir, fsAccessSupported, getBackupDir, writeBackupNow } from '../backup'
 import { SecretInput } from '../components/SecretInput'
 import { Modal } from '../components/Modal'
-import { kindLabel, shortDate } from '../format'
+import { shortDate } from '../format'
 import { setLocale, t } from '@i18n/index'
 
 export function Settings() {
@@ -233,6 +233,7 @@ function ImportSection() {
                   retired: plan.summary.retiredAdded,
                   allow: plan.summary.allowlistAdded,
                   excl: plan.summary.exclusionsAdded,
+                  presets: plan.summary.presetsAdded,
                 })}
               </p>
               {plan.conflicts.length > 0 && (
@@ -544,28 +545,12 @@ function FieldsSection() {
   return (
     <section class="cv-card">
       <h3>{t('settings.fields')}</h3>
-      <table class="cv-table">
-        <thead>
-          <tr>
-            <th>{t('field.name')}</th>
-            <th>{t('field.kind')}</th>
-            <th>{t('field.example')}</th>
-            <th>{t('field.scope')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fields.map((f) => (
-            <tr key={f.id} class={f.tombstone ? 'cv-field-tombstone' : ''}>
-              <td>{f.name}</td>
-              <td>{kindLabel(f.kind)}</td>
-              <td>
-                <code>{f.example.length > 40 ? f.example.slice(0, 40) + '…' : f.example}</code>
-              </td>
-              <td>{f.scope === 'global' ? t('field.scopeGlobal') : t('field.scopeScript')}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <p class="cv-muted">
+        {t('settings.fieldsMoved', { n: fields.length })}{' '}
+        <button type="button" class="cv-linkbtn" onClick={() => navigate({ view: 'values' })}>
+          {t('nav.values')}
+        </button>
+      </p>
       {allow.length > 0 && (
         <>
           <h4>{t('settings.allowlist')}</h4>

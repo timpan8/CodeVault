@@ -42,6 +42,7 @@ async function seeded() {
     note: 'first',
   })
   await session.updateField(pw.id, { real: 'Host2025!' })
+  await session.createPreset({ name: 'Kort servernamn', kind: 'server', value: 'web-frontend.acme-demo.net' })
   return { store, session, recoveryKey, script, user, pw, now }
 }
 
@@ -54,7 +55,7 @@ describe('backup', () => {
     expect(text).not.toContain('svc-adsync')
     const parsed = parseBackup(text)
     const result = await testRestore(parsed, { password: 'pw' })
-    expect(result.counts).toEqual({ script: 1, version: 1, field: 2, retired: 1, settings: 1 })
+    expect(result.counts).toEqual({ script: 1, version: 1, field: 2, retired: 1, preset: 1, settings: 1 })
     await expect(testRestore(parsed, { password: 'wrong' })).rejects.toThrow()
     const viaRecovery = await openBackup(parsed, { recoveryKey })
     expect(viaRecovery.records.some((r) => r.type === 'field')).toBe(true)
@@ -72,6 +73,8 @@ describe('backup', () => {
     expect(re.listVersions(script.id)).toHaveLength(1)
     expect(re.realValue(pw.id)).toBe('Host2025!')
     expect(re.header.deviceId).toBe('dev-A')
+    // A record type missing from RECORD_TYPES is dropped silently on backup.
+    expect(re.listPresets().map((p) => p.value)).toEqual(['web-frontend.acme-demo.net'])
   })
 
   it('structure export carries templates but never a real value', async () => {

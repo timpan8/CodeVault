@@ -13,7 +13,7 @@
  * Idempotent: merging the same backup twice produces an empty plan.
  */
 import type { DecodedRecord } from './store'
-import type { AllowlistRecord, ExclusionRecord, FieldRecord, RetiredRecord, ScriptRecord, VersionRecord } from './model'
+import type { AllowlistRecord, ExclusionRecord, FieldRecord, PresetRecord, RetiredRecord, ScriptRecord, VersionRecord } from './model'
 
 export interface MergeConflict {
   fieldId: string
@@ -47,6 +47,7 @@ export interface MergePlan {
     retiredAdded: number
     allowlistAdded: number
     exclusionsAdded: number
+    presetsAdded: number
   }
 }
 
@@ -74,6 +75,7 @@ export function planMerge(local: readonly DecodedRecord[], incoming: readonly De
     retiredAdded: 0,
     allowlistAdded: 0,
     exclusionsAdded: 0,
+    presetsAdded: 0,
   }
 
   // scripts
@@ -199,6 +201,16 @@ export function planMerge(local: readonly DecodedRecord[], incoming: readonly De
     localExcl.add(key)
     adds.push(inc)
     summary.exclusionsAdded++
+  }
+
+  // Presets are a library of fakes, so same kind + same value is the same entry.
+  const localPresets = new Set(byType<PresetRecord>(local, 'preset').map((r) => `${r.data.kind}|${r.data.value.toLowerCase()}`))
+  for (const inc of byType<PresetRecord>(incoming, 'preset')) {
+    const key = `${inc.data.kind}|${inc.data.value.toLowerCase()}`
+    if (localPresets.has(key)) continue
+    localPresets.add(key)
+    adds.push(inc)
+    summary.presetsAdded++
   }
 
   const preview: MergePreviewScript[] = [...perScript.entries()].map(([scriptId, s]) => ({

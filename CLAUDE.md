@@ -83,7 +83,7 @@ src/engine/   pure functions, no DOM, run in a Web Worker (rpc.ts / client.ts / 
 src/vault/    crypto.ts (two protection modes, one DEK) · store.ts (Dexie) · lock.ts (auto-lock)
               session.ts (state machine: create/createUnprotected, addPassword/removePassword)
               backup.ts (rotating encrypted backup + structure export) · merge.ts (cross-machine import)
-src/ui/       Preact: screens/ (Setup, Unlock, Scripts, ScriptView, Sanitize, Settings, About)
+src/ui/       Preact: screens/ (Setup, Unlock, Scripts, ScriptView, Sanitize, Values, Settings, About)
               components/ (Editor, PasteSheet, DiffView, FieldsPanel, FieldForm, Exits, GuardFindings)
               state.ts (signals, routing, toasts)
 src/i18n/     UI strings, sv default with en fallback

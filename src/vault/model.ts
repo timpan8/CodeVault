@@ -3,9 +3,9 @@
  * never carries a real value; FieldRecord adds it here, and the session
  * splits the two apart before anything reaches the engine.
  */
-import type { Eol, Field, Segment, SlotStatus } from '@engine/types'
+import type { Eol, Field, FieldKind, Segment, SlotStatus } from '@engine/types'
 
-export type RecordType = 'script' | 'version' | 'field' | 'retired' | 'allowlist' | 'exclusion' | 'settings'
+export type RecordType = 'script' | 'version' | 'field' | 'retired' | 'allowlist' | 'exclusion' | 'preset' | 'settings'
 
 export interface ScriptRecord {
   id: string
@@ -71,6 +71,22 @@ export interface AllowlistRecord {
   expiresAt?: string
 }
 
+/**
+ * A saved example value to pick from when a field is created or changed. Never
+ * a real value: a preset is the fake side, so it is safe to list, to show and
+ * to send. Kept apart from FieldRecord because a preset has no real value and
+ * no place in any script — it is a library, not a binding.
+ */
+export interface PresetRecord {
+  id: string
+  /** Short label in the picker, e.g. 'Kort servernamn'. */
+  name: string
+  kind: FieldKind
+  value: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ExclusionRecord {
   id: string
   scriptId: string
@@ -115,6 +131,7 @@ export type AnyRecord =
   | { type: 'retired'; data: RetiredRecord }
   | { type: 'allowlist'; data: AllowlistRecord }
   | { type: 'exclusion'; data: ExclusionRecord }
+  | { type: 'preset'; data: PresetRecord }
   | { type: 'settings'; data: SettingsRecord }
 
 /** Split a FieldRecord into the engine-facing Field and its real value. */

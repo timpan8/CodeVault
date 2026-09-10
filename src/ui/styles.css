@@ -208,7 +208,11 @@ a { color: var(--cv-accent); }
 .cv-field-example code, .cv-field-real code { font-size: 0.85rem; }
 .cv-field-real { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0; min-height: 1.6rem; }
 .cv-field-realvalue { font-family: var(--cv-mono); word-break: break-all; }
-.cv-example-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.3rem; }
+.cv-example-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.3rem; align-items: center; }
+.cv-values .cv-card { max-width: 900px; }
+.cv-values h4 { margin: 0.9rem 0 0.3rem; }
+.cv-values .cv-table td { vertical-align: top; }
+.cv-preset-form { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--cv-border); }
 .cv-reveal { display: inline-flex; align-items: center; gap: 0.3rem; background: var(--cv-warn-bg); border: 1px solid var(--cv-warn); border-radius: 4px; padding: 0 0.2rem; }
 .cv-reveal-count { font-size: 0.75rem; color: var(--cv-muted); }
 

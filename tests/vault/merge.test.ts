@@ -37,12 +37,16 @@ describe('merge between two machines', () => {
     await B.updateField(field.id, { real: 'New2!' })
     await B.addAllowlist('10.9.9.9')
     await B.updateScript(script.id, { title: 'Sync (renamed on B)' })
+    await B.createPreset({ name: 'Kort servernamn', kind: 'server', value: 'web-frontend.acme-demo.net' })
+    // Both machines saved the same library value; it must not double up.
+    await A.createPreset({ name: 'Kort servernamn', kind: 'server', value: 'web-frontend.acme-demo.net' })
+    await B.createPreset({ name: 'Labbdomän', kind: 'domain', value: 'corp.acme-demo.net' })
 
     // Merge B's backup into A
     const backupB = parseBackup(serializeBackup(buildBackup(B.header, await storeB.allRaw())))
     const incoming = (await openBackup(backupB, { password: 'pw' })).records
     const plan = planMerge(await A.allDecoded(), incoming)
-    expect(plan.summary).toMatchObject({ versionsAdded: 1, fieldsUpdated: 1, allowlistAdded: 1, retiredAdded: 1, scriptsUpdated: 1, scriptsAdded: 0 })
+    expect(plan.summary).toMatchObject({ versionsAdded: 1, fieldsUpdated: 1, allowlistAdded: 1, retiredAdded: 1, scriptsUpdated: 1, scriptsAdded: 0, presetsAdded: 1 })
     expect(plan.conflicts).toHaveLength(1)
     expect(plan.conflicts[0]).toMatchObject({ fieldId: field.id, resolution: 'took-incoming' })
     expect(plan.conflicts[0]!.differing).toContain('valueByProfile')
@@ -59,6 +63,7 @@ describe('merge between two machines', () => {
     expect(merged.title).toBe('Sync (renamed on B)')
     expect(merged.stableVersionId).toBe(v1.id)
     expect(A.listExclusions(script.id)).toHaveLength(1)
+    expect(A.listPresets().map((p) => p.value)).toEqual(['corp.acme-demo.net', 'web-frontend.acme-demo.net'])
 
     // Idempotent
     const again = planMerge(await A.allDecoded(), incoming)
