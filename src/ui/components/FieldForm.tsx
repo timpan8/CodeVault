@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'preact/hooks'
 import { FIELD_KINDS, type Field, type FieldKind } from '@engine/types'
-import { generateExample } from '@engine/examples'
+import { isInExampleNamespace, nextExample } from '@engine/examples'
 import { buildBlobExample } from '@engine/blob'
-import { matchRuleFor, suggestFieldName } from '@engine/fields'
+import { kindMasksByDefault, matchRuleFor, suggestFieldName } from '@engine/fields'
 import { directoryPart } from '../review'
 import type { FieldRecord } from '@vault/model'
 import { ExampleInvalidError } from '@vault/session'
 import { getSession, toast } from '../state'
 import { kindLabel } from '../format'
 import { SecretInput } from './SecretInput'
-import { t } from '@i18n/index'
+import { t, type StringKey } from '@i18n/index'
 
 export interface FieldFormInitial {
   name?: string
@@ -19,6 +19,8 @@ export interface FieldFormInitial {
   bindingName?: string
   /** Raw text of a table block (blob fields). */
   blobRaw?: string
+  /** What the AI itself wrote at this spot; offered as the example value. */
+  exampleFromCode?: string
 }
 
 export function FieldForm(props: {
@@ -44,12 +46,38 @@ export function FieldForm(props: {
   const [error, setError] = useState<string | null>(null)
 
   const namespace = session.namespace()
-  const examplePreview = useMemo(() => {
-    if (editing) return editing.example
-    if (kind === 'blob') return buildBlobExample(props.initial.blobRaw ?? real, session.listFields(true).filter((f) => f.kind === 'blob').length + 1, namespace)
-    const n = session.listFields(true).filter((f) => f.kind === kind).length + 1
-    return generateExample(kind, n, namespace, real ? { shapeOf: real } : {})
-  }, [kind, real, editing])
+  /** The real value in this form is not in the vault yet, so pass it along. */
+  const exampleOpts = (forReal: string) => ({
+    ...(props.editFieldId ? { exceptId: props.editFieldId } : {}),
+    ...(forReal ? { pendingReal: forReal } : {}),
+  })
+  /** The tool's own suggestion for the current kind and real value. */
+  const generated = (forKind: FieldKind, forReal: string): string => {
+    if (forKind === 'blob') return buildBlobExample(props.initial.blobRaw ?? forReal, session.listFields(true).filter((f) => f.kind === 'blob').length + 1, namespace)
+    return nextExample(
+      forKind,
+      session.listFields(true),
+      namespace,
+      forReal ? { shapeOf: forReal } : {},
+      (c) => session.validateExampleFor(c, forKind, exampleOpts(forReal)).length === 0,
+    )
+  }
+  const [example, setExample] = useState(() => editing?.example ?? props.initial.exampleFromCode ?? generated(kind, real))
+  // Only an untouched field follows the kind; once it is edited it is the user's.
+  const [exampleTouched, setExampleTouched] = useState(editing !== undefined || props.initial.exampleFromCode !== undefined)
+  const regenerate = (forKind: FieldKind, forReal: string) => {
+    if (exampleTouched) return
+    setExample(generated(forKind, forReal))
+  }
+
+  const exampleProblems = useMemo(
+    () => (example.trim() ? session.validateExampleFor(example, kind, exampleOpts(real)) : []),
+    [example, kind, real, props.editFieldId],
+  )
+  const outsideNamespace = example.trim() !== '' && exampleProblems.length === 0 && !isInExampleNamespace(example, namespace)
+
+  /** Saved library values of this kind, offered as a pick-list. */
+  const presets = useMemo(() => session.listPresets(kind), [kind])
 
   const duplicate = useMemo(() => {
     if (!real || editing) return undefined
@@ -68,6 +96,7 @@ export function FieldForm(props: {
     if (busy) return
     if (!name.trim()) return
     if (props.requireReal && !real) return
+    if (exampleProblems.length > 0) return
     setBusy(true)
     setError(null)
     try {
@@ -85,6 +114,7 @@ export function FieldForm(props: {
           name: name.trim(),
           kind,
           scope,
+          ...(example !== editing.example ? { example } : {}),
           ...(real !== (session.realValue(editing.id) ?? '') ? { real } : {}),
         })
       } else {
@@ -94,7 +124,9 @@ export function FieldForm(props: {
           ...(real ? { real } : {}),
           scope,
           ...(props.initial.bindingName ? { nameAnchors: [props.initial.bindingName] } : {}),
-          ...(kind === 'blob' ? { example: examplePreview } : {}),
+          // Always the value on screen: the form used to discard it for every
+          // kind but blob and let createField generate a different one.
+          example,
           ...(template ? { template } : {}),
         })
       }
@@ -122,7 +154,16 @@ export function FieldForm(props: {
       </label>
       <label class="cv-label">
         {t('field.kind')}
-        <select class="cv-input" value={kind} onChange={(e) => setKind((e.currentTarget as HTMLSelectElement).value as FieldKind)} disabled={props.initial.blobRaw !== undefined}>
+        <select
+          class="cv-input"
+          value={kind}
+          onChange={(e) => {
+            const next = (e.currentTarget as HTMLSelectElement).value as FieldKind
+            setKind(next)
+            regenerate(next, real)
+          }}
+          disabled={props.initial.blobRaw !== undefined}
+        >
           {FIELD_KINDS.map((k) => (
             <option value={k} key={k}>
               {kindLabel(k)}
@@ -133,7 +174,15 @@ export function FieldForm(props: {
       {kind !== 'blob' ? (
         <label class="cv-label">
           {t('field.real')} {props.requireReal ? '*' : ''}
-          <SecretInput value={real} onInput={setReal} ariaLabel={t('field.real')} />
+          <SecretInput
+            value={real}
+            onInput={(v) => {
+              setReal(v)
+              regenerate(kind, v)
+            }}
+            ariaLabel={t('field.real')}
+            masked={kindMasksByDefault(kind)}
+          />
           <span class="cv-hint">{t('field.realHint')}</span>
           {tooShort && <span class="cv-hint cv-warn">{t('field.tooShort')}</span>}
         </label>
@@ -155,8 +204,76 @@ export function FieldForm(props: {
       )}
       <div class="cv-label">
         {t('field.example')}
-        <pre class="cv-pre cv-pre-small">{examplePreview}</pre>
-        <span class="cv-hint">{t('field.exampleGenerated')}</span>
+        {kind === 'blob' ? (
+          // A blob example is a synthetic two-row block, not a value to type.
+          <pre class="cv-pre cv-pre-small">{example}</pre>
+        ) : (
+          <>
+            <input
+              class="cv-input"
+              value={example}
+              onInput={(e) => {
+                setExampleTouched(true)
+                setExample((e.currentTarget as HTMLInputElement).value)
+              }}
+              spellcheck={false}
+              autocomplete="off"
+              aria-label={t('field.example')}
+            />
+            <div class="cv-example-actions">
+              <button
+                type="button"
+                class="cv-btn cv-btn-small"
+                onClick={() => {
+                  setExampleTouched(false)
+                  setExample(generated(kind, real))
+                }}
+              >
+                {t('field.exampleGenerate')}
+              </button>
+              {presets.length > 0 && (
+                <select
+                  class="cv-input cv-input-small"
+                  value=""
+                  onChange={(e) => {
+                    const picked = (e.currentTarget as HTMLSelectElement).value
+                    if (!picked) return
+                    setExampleTouched(true)
+                    setExample(picked)
+                    e.currentTarget.value = ''
+                  }}
+                  aria-label={t('field.exampleFromLibrary')}
+                >
+                  <option value="">{t('field.exampleFromLibrary')}</option>
+                  {presets.map((p) => (
+                    <option value={p.value} key={p.id}>
+                      {p.name} — {p.value}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {props.initial.exampleFromCode && props.initial.exampleFromCode !== example && (
+                <button
+                  type="button"
+                  class="cv-btn cv-btn-small"
+                  onClick={() => {
+                    setExampleTouched(true)
+                    setExample(props.initial.exampleFromCode!)
+                  }}
+                >
+                  {t('field.exampleFromCode')}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        <span class="cv-hint">{t('field.exampleHint')}</span>
+        {exampleProblems.length > 0 && (
+          <span class="cv-hint cv-warn">
+            {exampleProblems.map((p) => t(`field.exampleProblem.${p}` as StringKey)).join(' ')}
+          </span>
+        )}
+        {outsideNamespace && <span class="cv-hint cv-warn">{t('field.exampleOutsideNs')}</span>}
       </div>
       <label class="cv-label">
         {t('field.scope')}
@@ -180,7 +297,7 @@ export function FieldForm(props: {
       )}
       {error && <div class="cv-callout cv-callout-error">{error}</div>}
       <div class="cv-actions">
-        <button type="submit" class="cv-btn cv-btn-primary" disabled={busy || !name.trim() || (props.requireReal === true && !real)}>
+        <button type="submit" class="cv-btn cv-btn-primary" disabled={busy || !name.trim() || (props.requireReal === true && !real) || exampleProblems.length > 0}>
           {editing ? t('field.update') : t('field.create')}
         </button>
         <button type="button" class="cv-btn" onClick={props.onCancel}>

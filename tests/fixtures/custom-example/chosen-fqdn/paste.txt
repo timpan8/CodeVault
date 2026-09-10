@@ -1,0 +1,4 @@
+# Deploy against web-frontend.acme-demo.net before the real run.
+$WebHost = 'web01.corp.contoso.se'
+$UserName = 'svc-adsync'
+Connect-Thing -Server $WebHost -UserName $UserName

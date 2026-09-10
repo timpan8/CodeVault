@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks'
+import { masksByDefault } from '@engine/fields'
 import type { FieldRecord } from '@vault/model'
 import { getSession, toast } from '../state'
 import { kindLabel, mask, shortDate } from '../format'
@@ -37,20 +38,30 @@ export function FieldsPanel(props: { usedIds: Set<string>; scriptId: string }) {
         <div class="cv-field-example">
           <code>{f.example.length > 60 ? f.example.slice(0, 60) + '…' : f.example}</code>
         </div>
-        <div class="cv-field-real" onContextMenu={(e) => e.preventDefault()}>
-          {real === undefined ? (
+        {real === undefined ? (
+          <div class="cv-field-real">
             <span class="cv-warn">{t('field.noReal')}</span>
-          ) : revealId === f.id ? (
-            <Reveal value={real} onDone={() => setRevealId(null)} />
-          ) : (
-            <>
-              <code>{mask(real)}</code>
-              <button type="button" class="cv-btn cv-btn-small cv-btn-ghost" onClick={() => setRevealId(f.id)}>
-                {t('field.reveal')}
-              </button>
-            </>
-          )}
-        </div>
+          </div>
+        ) : !masksByDefault(f) ? (
+          // Identifying, not secret: you cannot check a server name against the
+          // code while it reads as dots. Print rules still hide it.
+          <div class="cv-field-real">
+            <code class="cv-field-realvalue">{real.length > 60 ? real.slice(0, 60) + '…' : real}</code>
+          </div>
+        ) : (
+          <div class="cv-field-real" onContextMenu={(e) => e.preventDefault()}>
+            {revealId === f.id ? (
+              <Reveal value={real} onDone={() => setRevealId(null)} />
+            ) : (
+              <>
+                <code>{mask(real)}</code>
+                <button type="button" class="cv-btn cv-btn-small cv-btn-ghost" onClick={() => setRevealId(f.id)}>
+                  {t('field.reveal')}
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {f.exposedAt && (
           <div class="cv-callout cv-callout-warn cv-small">
             {t('field.exposed', { date: shortDate(f.exposedAt) })}{' '}

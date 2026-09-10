@@ -63,6 +63,9 @@ Decisions, not accidents. Several are enforced by tests.
    the version history, error messages or issue objects.
 7. **Same-origin CSP in `index.html`.** No CDN, no web fonts, no telemetry, no network calls.
 8. **Inputs are `type=text`** with manual masking and `autocomplete=off`, never `type=password`.
+   Masking follows sensitivity, not the widget: `masksByDefault()` in `src/engine/fields.ts` is the
+   only rule, and only `sensitivity === 'secret'` is hidden by default. Identifying values — server
+   names, domains, paths — are shown, because you cannot check them against the code as dots.
 9. **Only `dist/` is published.** Never user data, never a backup file.
 10. **Records are encrypted in both protection modes.** What changes is where the DEK lives, never
     whether it is used — there is no plaintext storage path to keep in step. A backup of an
@@ -80,7 +83,7 @@ src/engine/   pure functions, no DOM, run in a Web Worker (rpc.ts / client.ts / 
 src/vault/    crypto.ts (two protection modes, one DEK) · store.ts (Dexie) · lock.ts (auto-lock)
               session.ts (state machine: create/createUnprotected, addPassword/removePassword)
               backup.ts (rotating encrypted backup + structure export) · merge.ts (cross-machine import)
-src/ui/       Preact: screens/ (Setup, Unlock, Scripts, ScriptView, Sanitize, Settings, About)
+src/ui/       Preact: screens/ (Setup, Unlock, Scripts, ScriptView, Sanitize, Values, Settings, About)
               components/ (Editor, PasteSheet, DiffView, FieldsPanel, FieldForm, Exits, GuardFindings)
               state.ts (signals, routing, toasts)
 src/i18n/     UI strings, sv default with en fallback

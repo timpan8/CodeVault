@@ -224,7 +224,7 @@ export function structureExportStrings(e: StructureExport): string[] {
   return out
 }
 
-export const RECORD_TYPES: readonly RecordType[] = ['script', 'version', 'field', 'retired', 'allowlist', 'exclusion', 'settings']
+export const RECORD_TYPES: readonly RecordType[] = ['script', 'version', 'field', 'retired', 'allowlist', 'exclusion', 'preset', 'settings']
 
 /**
  * Write a file into a directory handle (File System Access API) and prune

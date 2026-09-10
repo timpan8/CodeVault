@@ -30,11 +30,11 @@ Kodbasen kommer från mappen `codevault/` i [timpan8/Coding-Tool](https://github
 
 ## Hotmodell i korthet
 
-Det verktyget alltid skyddar mot, oavsett läge: att riktiga värden når AI-chatten via urklipp (läckvakten står mellan), att de ligger i klartext på disk (varje post är AES-GCM i IndexedDB) och skärmdelning (maskerat som standard).
+Det verktyget alltid skyddar mot, oavsett läge: att riktiga värden når AI-chatten via urklipp (läckvakten står mellan) och att de ligger i klartext på disk (varje post är AES-GCM i IndexedDB). Mot skärmdelning skyddar det delvis: hemligheter — lösenord, API-nycklar och datablock — är maskerade som standard och visas bara på begäran, medan identifierande värden som servernamn, domäner och sökvägar syns i klartext. Det är ett medvetet val: du kan inte stämma av ett servernamn mot koden medan det står som punkter.
 
 Vad master-lösenordet lägger till: utan lösenord ligger valvets nyckel i samma databas som datan, så vem som helst som kommer åt din inloggade webbläsarprofil kan öppna valvet — och auto-lås är då avstängt, eftersom ett lås utan hemlighet bara skulle låsa upp sig självt igen. Med lösenord finns nyckeln ingenstans på disk och auto-låset gör nytta. Backupfilen ärver samma sak: en backup av ett oskyddat valv bär med sig sin egen nyckel (annars gick den inte att öppna på en annan maskin) och är därför bara så säker som platsen du lägger den på.
 
-Det skyddar **inte**, i något läge, mot webbläsartillägg som läser sidan, mot en editor med inbyggd AI (Copilot, Cursor) som redan ser den riktiga filen, och det kan inte radera poster ur Windows urklippshistorik (Win+V) från en webbsida.
+Det skyddar **inte**, i något läge, mot webbläsartillägg som läser sidan, mot en editor med inbyggd AI (Copilot, Cursor) som redan ser den riktiga filen, och det kan inte radera poster ur Windows urklippshistorik (Win+V) från en webbsida. Vid skärmdelning syns dina servernamn och sökvägar, enligt stycket ovan — dela skärm med det i åtanke.
 
 ## Köra
 
@@ -110,4 +110,4 @@ scripts/      check-deps.mjs (licenser och THIRD-PARTY-NOTICES)
 - Exakt en `exportReal()`-kodväg. Inga genvägar.
 - `Ctrl+C`, klipp och drag i editorn ger alltid den sanerade renderingen och kör vakten.
 - `index.html` bär en same-origin-CSP. Inga CDN-länkar, inga webbfonter, ingen telemetri. Appen gör inga nätverksanrop av sig själv.
-- Alla inmatningsfält är `type=text` med manuell maskering och `autocomplete=off`, aldrig `type=password`.
+- Alla inmatningsfält är `type=text` med manuell maskering och `autocomplete=off`, aldrig `type=password`. Vad som maskeras avgörs av fältets känslighet, inte av widgeten: bara hemligheter döljs som standard.

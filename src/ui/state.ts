@@ -16,6 +16,7 @@ export type Route =
   | { view: 'scripts' }
   | { view: 'script'; scriptId: string; versionId?: string }
   | { view: 'sanitize' }
+  | { view: 'values' }
   | { view: 'settings' }
   | { view: 'about' }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_NAMESPACE, generateExample, isInExampleNamespace, nextExample } from '@engine/examples'
+import { DEFAULT_NAMESPACE, generateExample, isInExampleNamespace, isToolExample, knownExamples, nextExample } from '@engine/examples'
 import { FIELD_KINDS } from '@engine/types'
 import { matchRuleFor, needsEscapingChars, normalizeAnchorName, pathSensitivity, suggestFieldName, validateExample } from '@engine/fields'
 
@@ -70,5 +70,31 @@ describe('field rules', () => {
     expect(pathSensitivity('\\\\fs01\\share')).toBe('internal')
     expect(suggestFieldName('password', '$AdminPw')).toBe('ADMINPW')
     expect(suggestFieldName('password')).toBe('PASSWORD')
+  })
+})
+
+describe('values the tool claims as its own', () => {
+  const fields = [
+    { example: 'web-frontend.acme-demo.net', aliases: [{ value: 'web-frontend.acme-demo.io', anchorOnly: false }, { value: 'admin', anchorOnly: true }] },
+    { example: 'SRV-EXAMPLE01.corp.example', aliases: [] },
+  ]
+
+  it('knownExamples collects examples and real aliases, never anchor-only ones', () => {
+    const known = knownExamples(fields)
+    expect([...known].sort()).toEqual(['srv-example01.corp.example', 'web-frontend.acme-demo.io', 'web-frontend.acme-demo.net'])
+  })
+
+  it('isToolExample accepts a chosen example outside the reserved namespace', () => {
+    const known = knownExamples(fields)
+    // The namespace test alone cannot see a value the user chose.
+    expect(isInExampleNamespace('web-frontend.acme-demo.net', DEFAULT_NAMESPACE)).toBe(false)
+    expect(isToolExample('web-frontend.acme-demo.net', DEFAULT_NAMESPACE, known)).toBe(true)
+    // Case-insensitive, since the set is lower-cased.
+    expect(isToolExample('WEB-Frontend.Acme-Demo.NET', DEFAULT_NAMESPACE, known)).toBe(true)
+    // An anchor-only alias failed the example rules, so it stays untrusted.
+    expect(isToolExample('admin', DEFAULT_NAMESPACE, known)).toBe(false)
+    // Namespace values still pass with no set at all.
+    expect(isToolExample('svc-example01')).toBe(true)
+    expect(isToolExample('dc01.corp.contoso.se', DEFAULT_NAMESPACE, known)).toBe(false)
   })
 })

@@ -67,6 +67,57 @@ describe('VaultSession', () => {
     await expect(session.createField({ name: 'D', kind: 'custom', example: 'ab' })).rejects.toBeInstanceOf(ExampleInvalidError)
   })
 
+  it('changing an example value keeps the old one as an alias', async () => {
+    const { session } = await VaultSession.create(newStore(), 'pw', { iterations: ITER, now: clock() })
+    const f = await session.createField({ name: 'WEB', kind: 'server', real: 'web01.corp.local' })
+    expect(f.example).toBe('SRV-EXAMPLE01.corp.example')
+
+    const changed = await session.updateField(f.id, { example: 'web-frontend.acme-demo.net' })
+    expect(changed.example).toBe('web-frontend.acme-demo.net')
+    // The AI has already written the old value; it must keep matching.
+    expect(changed.aliases).toEqual([{ value: 'SRV-EXAMPLE01.corp.example', anchorOnly: false }])
+
+    // Idempotent: setting the same value again adds nothing.
+    const again = await session.updateField(f.id, { example: 'web-frontend.acme-demo.net' })
+    expect(again.aliases).toHaveLength(1)
+  })
+
+  it('an invalid new example value is refused and the field is untouched', async () => {
+    const { session } = await VaultSession.create(newStore(), 'pw', { iterations: ITER, now: clock() })
+    const a = await session.createField({ name: 'A', kind: 'server', real: 'dc01.corp.local' })
+    const b = await session.createField({ name: 'B', kind: 'server', real: 'dc02.corp.local' })
+    await expect(session.updateField(a.id, { example: b.example })).rejects.toBeInstanceOf(ExampleInvalidError)
+    await expect(session.updateField(a.id, { example: 'ab' })).rejects.toBeInstanceOf(ExampleInvalidError)
+    // Its own real value is not "already taken" by itself.
+    await expect(session.updateField(a.id, { example: 'dc01.corp.local' })).rejects.toBeInstanceOf(ExampleInvalidError)
+    expect(session.getField(a.id)?.example).toBe(a.example)
+  })
+
+  it('the real value being set in the same call can never become the example', async () => {
+    const { session } = await VaultSession.create(newStore(), 'pw', { iterations: ITER, now: clock() })
+    // Nothing in the vault knows this value yet, so it is the one real value
+    // that would otherwise go unchecked.
+    await expect(session.createField({ name: 'A', kind: 'server', real: 'dc01.corp.local', example: 'dc01.corp.local' })).rejects.toBeInstanceOf(
+      ExampleInvalidError,
+    )
+    const f = await session.createField({ name: 'B', kind: 'server', real: 'dc02.corp.local' })
+    await expect(session.updateField(f.id, { real: 'dc03.corp.local', example: 'dc03.corp.local' })).rejects.toBeInstanceOf(
+      ExampleInvalidError,
+    )
+  })
+
+  it('stored versions render the new example value with no rewriting', async () => {
+    const { session } = await VaultSession.create(newStore(), 'pw', { iterations: ITER, now: clock() })
+    const f = await session.createField({ name: 'WEB', kind: 'server', real: 'web01.corp.local' })
+    const script = await session.createScript({ title: 'S', aiVisibleName: 'Project01', language: 'powershell', eol: 'crlf' })
+    const segments = parseTemplate(`$s = '\u27e6f:${f.id}|sq\u27e7'`)
+    await session.addVersion({ scriptId: script.id, segments, source: 'ai', eol: 'crlf' })
+
+    await session.updateField(f.id, { example: 'web-frontend.acme-demo.net' })
+    const v = session.listVersions(script.id)[0]!
+    expect(render(v.segments, 'example', { fields: session.fieldMap() }).text).toBe("$s = 'web-frontend.acme-demo.net'")
+  })
+
   it('a real value inside the fake namespace switches the namespace', async () => {
     const { session } = await VaultSession.create(newStore(), 'pw', { iterations: ITER, now: clock() })
     expect(session.header.namespaceIndex).toBe(0)

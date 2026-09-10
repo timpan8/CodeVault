@@ -1,0 +1,22 @@
+{
+ "slots": [
+  {
+   "fieldId": "web",
+   "line": 1,
+   "status": "auto",
+   "why": "literal"
+  },
+  {
+   "fieldId": "web",
+   "line": 2,
+   "status": "auto",
+   "why": "real"
+  },
+  {
+   "fieldId": "user",
+   "line": 3,
+   "status": "auto",
+   "why": "real"
+  }
+ ]
+}

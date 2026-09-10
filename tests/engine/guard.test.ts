@@ -119,6 +119,31 @@ describe('guard pass 2: structural detectors', () => {
     expect(run(text).findings).toEqual([])
   })
 
+  it('a chosen example value outside the namespace does not block its own field', () => {
+    // The user picked the example the AI wrote instead of a generated one, so it
+    // falls outside the reserved namespace. The guard must still recognise it as
+    // the tool's own fake, or "Kopiera for AI" would refuse the sanitized output.
+    const chosen = mk('web', 'server', 'web-frontend.acme-demo.net')
+    const text = "Connect-Thing -Server 'web-frontend.acme-demo.net'"
+    // Unknown to the vault it is an identifying host name and blocks, as it should.
+    expect(guard({ text, fields, real, now: NOW }).blocked).toBe(true)
+    // Claimed as a field's example it is the tool's own fake and must pass.
+    expect(guard({ text, fields: [...fields, chosen], real, now: NOW }).findings).toEqual([])
+  })
+
+  it('a learned alias counts as the tool own fake, an anchor-only alias does not', () => {
+    const withAliases: Field = {
+      ...mk('web', 'server', 'web-frontend.acme-demo.net'),
+      aliases: [
+        { value: 'web-frontend.acme-demo.io', anchorOnly: false },
+        { value: 'api.acme-demo.io', anchorOnly: true },
+      ],
+    }
+    const all = [...fields, withAliases]
+    expect(guard({ text: "$a = 'web-frontend.acme-demo.io'", fields: all, real, now: NOW }).findings).toEqual([])
+    expect(guard({ text: "$a = 'api.acme-demo.io'", fields: all, real, now: NOW }).findings).not.toEqual([])
+  })
+
   it('allowlist suppresses pass 2 unless expired', () => {
     const text = "$ip = '10.1.2.3'"
     expect(pass2(text, { allowlist: [{ value: '10.1.2.3' }] })).toEqual([])

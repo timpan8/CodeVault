@@ -1,4 +1,5 @@
 import type { GuardFinding } from '@engine/guard'
+import { kindMasksByDefault, masksByDefault } from '@engine/fields'
 import { getSession } from '../state'
 import { mask } from '../format'
 import { Modal } from './Modal'
@@ -18,7 +19,7 @@ export function GuardFindings(props: {
       <ul class="cv-list">
         {props.findings.map((f, i) => {
           const field = f.fieldId ? session.getField(f.fieldId) : undefined
-          const secret = field ? field.kind === 'password' || field.kind === 'apiKey' || field.kind === 'blob' : f.kind === 'password' || f.kind === 'apiKey'
+          const secret = field ? masksByDefault(field) : kindMasksByDefault(f.kind)
           return (
             <li key={i} class={`cv-row cv-row-guard-${f.pass}`}>
               <div class="cv-row-main">

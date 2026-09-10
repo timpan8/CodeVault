@@ -113,18 +113,26 @@ export function generateExample(
   }
 }
 
-/** Smallest n >= 1 whose generated example is not already used by another field. */
+/**
+ * Smallest n >= 1 whose generated example is free. `accept` lets the caller add
+ * the full example rules on top of plain uniqueness, so the value a form shows
+ * is the value the vault will accept — they used to be generated separately and
+ * could differ.
+ */
 export function nextExample(
   kind: FieldKind,
   fields: Iterable<Pick<Field, 'example'>>,
   ns: ExampleNamespace = DEFAULT_NAMESPACE,
   opts: GenerateOptions = {},
+  accept?: (candidate: string) => boolean,
 ): string {
   const used = new Set<string>()
   for (const f of fields) used.add(f.example.toLowerCase())
   for (let n = 1; n < 10_000; n++) {
     const candidate = generateExample(kind, n, ns, opts)
-    if (!used.has(candidate.toLowerCase())) return candidate
+    if (used.has(candidate.toLowerCase())) continue
+    if (accept && !accept(candidate)) continue
+    return candidate
   }
   throw new Error('example namespace exhausted')
 }
@@ -162,4 +170,29 @@ export function isInExampleNamespace(value: string, ns: ExampleNamespace = DEFAU
  */
 export function realValueCollidesWithNamespace(realValue: string, ns: ExampleNamespace): boolean {
   return isInExampleNamespace(realValue, ns)
+}
+
+/**
+ * Lower-cased set of every value the vault claims as a fake: each field's
+ * example plus the aliases learned from AI code. Anchor-only aliases are left
+ * out — they failed the example rules, so they are not trustworthy on sight.
+ */
+export function knownExamples(fields: Iterable<Pick<Field, 'example' | 'aliases'>>): Set<string> {
+  const out = new Set<string>()
+  for (const f of fields) {
+    if (f.example) out.add(f.example.toLowerCase())
+    for (const a of f.aliases ?? []) if (!a.anchorOnly && a.value) out.add(a.value.toLowerCase())
+  }
+  return out
+}
+
+/**
+ * True when a value is one the tool itself put in the code. The namespace is
+ * the by-construction half; `known` covers example values the user chose, which
+ * sit outside it. Without the second half the leak guard would flag the tool's
+ * own sanitised output.
+ */
+export function isToolExample(value: string, ns: ExampleNamespace = DEFAULT_NAMESPACE, known?: ReadonlySet<string>): boolean {
+  if (known !== undefined && known.has(value.toLowerCase())) return true
+  return isInExampleNamespace(value, ns)
 }

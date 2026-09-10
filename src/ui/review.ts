@@ -3,6 +3,7 @@
  * decisions, and the version that results from them. Pure and testable.
  */
 import { applyProposals, type MissingField, type ReapplyResult, type SlotProposal, type UnknownValue } from '@engine/reapply'
+import { masksByDefault } from '@engine/fields'
 import type { Field, Segment } from '@engine/types'
 import type { ReviewLogEntry } from '@vault/model'
 
@@ -83,10 +84,6 @@ export interface BuiltVersion {
   exposedFieldIds: string[]
 }
 
-function isSecret(f: Field | undefined): boolean {
-  return f !== undefined && (f.kind === 'password' || f.kind === 'apiKey' || f.kind === 'blob')
-}
-
 export function buildVersion(
   text: string,
   rows: ReviewRow[],
@@ -143,7 +140,7 @@ export function buildVersion(
     const status = row.decision === 'accept' ? 'auto' : 'confirm'
     if (status === 'confirm') {
       unresolved++
-      if (isSecret(fields.get(row.fieldId))) secretUnresolved++
+      if (masksByDefault(fields.get(row.fieldId))) secretUnresolved++
     }
     const proposal: SlotProposal = { ...p, fieldId: row.fieldId, status }
     proposals.push(proposal)

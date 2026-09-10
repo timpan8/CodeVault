@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test'
 const PASSWORD = 'correct-horse-battery'
 const REAL_PW = 'Sommar2024!'
 const REAL_SERVER = 'dc01.corp.contoso.se'
+/** Outside the reserved namespace on purpose: the guard must still let it out. */
+const CHOSEN_EXAMPLE = 'web-frontend.acme-demo.net'
 
 const EDITOR_PASTE = [
   '# Sync users to the lab',
@@ -58,10 +60,17 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   await form.getByRole('button', { name: 'Skapa fält' }).click()
   await expect(pwRow.locator('.cv-chip-accept')).toBeVisible()
 
-  // register the server as a field too
+  // register the server as a field too, and choose its example value by hand
   const srvRow = unknownRows.filter({ hasText: 'rad 4' })
   await srvRow.getByRole('button', { name: 'Skapa fält' }).click()
   await form.locator('input.cv-input').first().fill('DC')
+  const exampleInput = form.getByLabel('Exempelvärde (det AI:n ser)')
+  await expect(exampleInput).toHaveValue('SRV-EXAMPLE01.corp.example')
+  // The vault's own real value can never become what the AI sees.
+  await exampleInput.fill(REAL_SERVER)
+  await expect(form.getByRole('button', { name: 'Skapa fält' })).toBeDisabled()
+  await exampleInput.fill(CHOSEN_EXAMPLE)
+  await expect(form.getByRole('button', { name: 'Skapa fält' })).toBeEnabled()
   await form.getByRole('button', { name: 'Skapa fält' }).click()
   await expect(srvRow.locator('.cv-chip-accept')).toBeVisible()
 
@@ -70,10 +79,19 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   // --- script view: pills for both fields, sanitized copy
   await expect(page.locator('.cv-editor')).toBeVisible()
   await expect(page.locator('.cv-pill')).toHaveCount(3)
+
+  // identifying values are readable, secrets are not
+  const dcField = page.locator('.cv-field', { hasText: 'DC' })
+  await expect(dcField).toContainText(REAL_SERVER)
+  await expect(dcField.getByRole('button', { name: 'Visa i 10 s' })).toHaveCount(0)
+  const pwField = page.locator('.cv-field', { hasText: 'SVC_PW' })
+  await expect(pwField).not.toContainText(REAL_PW)
+  await expect(pwField.getByRole('button', { name: 'Visa i 10 s' })).toBeVisible()
   await page.getByRole('button', { name: /Kopiera för AI/ }).click()
   await expect.poll(() => readClipboard(page)).toContain('Ex@mple-Passw0rd-1')
   const aiCopy = await readClipboard(page)
-  expect(aiCopy).toContain('SRV-EXAMPLE01.corp.example')
+  // A chosen example leaves through the leak guard like any other fake.
+  expect(aiCopy).toContain(CHOSEN_EXAMPLE)
   expect(aiCopy).toContain('svc-example01')
   expect(aiCopy).not.toContain('svc-adsync')
   expect(aiCopy).not.toContain(REAL_PW)
@@ -132,6 +150,27 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   await page.getByRole('button', { name: /Kopiera för AI/ }).click()
   await expect.poll(() => readClipboard(page)).toContain('$AdminPassword')
   expect(await readClipboard(page)).not.toContain(REAL_PW)
+
+  // --- the Värden page: three lists, and the preset library feeds the field form
+  await page.getByRole('button', { name: 'Värden' }).click()
+  const personal = page.locator('.cv-card', { has: page.getByRole('heading', { name: 'Mina personliga värden' }) })
+  await expect(personal).toContainText('SVC_USER')
+  await expect(personal).toContainText(REAL_SERVER)
+  await expect(personal).not.toContainText(REAL_PW)
+
+  const ai = page.locator('.cv-card', { has: page.getByRole('heading', { name: 'Värden AI:n kan ta emot' }) })
+  await expect(ai).toContainText(CHOSEN_EXAMPLE)
+  await expect(ai).not.toContainText(REAL_PW)
+  await expect(ai).not.toContainText(REAL_SERVER)
+  // Save one of the examples in use into the library.
+  await ai.locator('.cv-row', { hasText: CHOSEN_EXAMPLE }).getByRole('button', { name: 'Spara i biblioteket' }).click()
+  await expect(ai.locator('.cv-row', { hasText: CHOSEN_EXAMPLE })).toHaveCount(2)
+
+  const universal = page.locator('.cv-card', { has: page.getByRole('heading', { name: 'Universella värden' }) })
+  await expect(universal).toContainText('DC')
+
+  await page.getByRole('button', { name: 'Skript' }).click()
+  await page.locator('.cv-script-row').click()
 
   // --- locking is off until the vault is given a password
   await page.keyboard.press('Control+Shift+L')

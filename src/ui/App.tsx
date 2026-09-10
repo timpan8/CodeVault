@@ -10,6 +10,7 @@ import { Unlock } from './screens/Unlock'
 import { Scripts } from './screens/Scripts'
 import { ScriptView } from './screens/ScriptView'
 import { Sanitize } from './screens/Sanitize'
+import { Values } from './screens/Values'
 import { Settings } from './screens/Settings'
 import { About } from './screens/About'
 import { t } from '@i18n/index'
@@ -91,6 +92,9 @@ function Main() {
           <button type="button" class={`cv-navbtn ${r.view === 'sanitize' ? 'cv-navbtn-active' : ''}`} onClick={() => navigate({ view: 'sanitize' })}>
             {t('nav.sanitize')}
           </button>
+          <button type="button" class={`cv-navbtn ${r.view === 'values' ? 'cv-navbtn-active' : ''}`} onClick={() => navigate({ view: 'values' })}>
+            {t('nav.values')}
+          </button>
           <button type="button" class={`cv-navbtn ${r.view === 'settings' ? 'cv-navbtn-active' : ''}`} onClick={() => navigate({ view: 'settings' })}>
             {t('nav.settings')}
             {done < SETUP_STEPS.length && <span class="cv-chip cv-chip-small"> {t('nav.setupProgress', { done, total: SETUP_STEPS.length })}</span>}
@@ -118,6 +122,7 @@ function Main() {
         {r.view === 'scripts' && <Scripts />}
         {r.view === 'script' && <ScriptView scriptId={r.scriptId} versionId={r.versionId} />}
         {r.view === 'sanitize' && <Sanitize />}
+        {r.view === 'values' && <Values />}
         {r.view === 'settings' && <Settings />}
         {r.view === 'about' && <About />}
       </main>
