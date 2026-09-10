@@ -60,7 +60,10 @@ Decisions, not accidents. Several are enforced by tests.
 5. **Exactly one `exportReal()` path.** No shortcuts. `Ctrl+C`, cut and drag in the editor always give
    the sanitised rendering and run the guard.
 6. **Real values never reach** the editor document, the undo history, DOM attributes, the diff model,
-   the version history, error messages or issue objects.
+   the version history, error messages or issue objects. The review pane is the one place a raw paste
+   becomes a document, and every secret span is rewritten by `redactSpans()` *before*
+   `EditorState.create` — a replace decoration would leave the text where `sliceDoc()` and `toJSON()`
+   still reach it. No `history()` extension, and copy, cut, drag and context menu are all off there.
 7. **Same-origin CSP in `index.html`.** No CDN, no web fonts, no telemetry, no network calls.
 8. **Inputs are `type=text`** with manual masking and `autocomplete=off`, never `type=password`.
    Masking follows sensitivity, not the widget: `masksByDefault()` in `src/engine/fields.ts` is the
@@ -84,7 +87,8 @@ src/vault/    crypto.ts (two protection modes, one DEK) · store.ts (Dexie) · l
               session.ts (state machine: create/createUnprotected, addPassword/removePassword)
               backup.ts (rotating encrypted backup + structure export) · merge.ts (cross-machine import)
 src/ui/       Preact: screens/ (Setup, Unlock, Scripts, ScriptView, Sanitize, Values, Settings, About)
-              components/ (Editor, PasteSheet, DiffView, FieldsPanel, FieldForm, Exits, GuardFindings)
+              components/ (Editor, FindingsCode, PasteSheet, DiffView, FieldsPanel, FieldForm, Exits,
+              GuardFindings) · findings.ts (review spans + redaction, pure) · review.ts · layout.ts
               state.ts (signals, routing, toasts)
 src/i18n/     UI strings, sv default with en fallback
 tests/        Vitest fixtures + property tests; tests/e2e Playwright

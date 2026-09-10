@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks'
+import { useMemo, useState } from 'preact/hooks'
 import type { NormalizedPaste } from '@engine/normalize'
 import { learnFromAccepted, lineFingerprint, type MissingField, type ReapplyResult, type SlotProposal } from '@engine/reapply'
 import { contentHash } from '@engine/template'
@@ -6,6 +6,9 @@ import { kindMasksByDefault, masksByDefault } from '@engine/fields'
 import type { FieldRecord } from '@vault/model'
 import { engine, getSession, toast, useTick } from '../state'
 import { buildVersion, groupRows, initialRows, trimPathRow, type ReviewRow } from '../review'
+import { findingIndex, findingsOf, stepFinding } from '../findings'
+import { FindingsCode } from './FindingsCode'
+import { useShortcut } from '../keys'
 import { diffDoc, diffStats, formatStats } from '../diff'
 import { kindLabel, mask, suggestTitle } from '../format'
 import { FieldForm } from './FieldForm'
@@ -43,6 +46,7 @@ export function PasteSheet(props: {
   const [directionPrompt, setDirectionPrompt] = useState(false)
   const [duplicateOf, setDuplicateOf] = useState<number | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
+  const [activeId, setActiveId] = useState<string | null>(null)
 
   const updateRow = (id: string, patch: Partial<ReviewRow>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
   /** Resolve a row to a field; path fields cover the directory prefix only. */
@@ -118,6 +122,7 @@ export function PasteSheet(props: {
     setText(body)
     setResult(res)
     setRows(initialRows(res))
+    setActiveId(null)
     setMissingAck(new Set())
     setMode(m)
     if (!props.scriptId && !title) setTitle(suggestTitle(body))
@@ -264,7 +269,7 @@ export function PasteSheet(props: {
     const p = row.proposal!
     const field = row.fieldId ? session.getField(row.fieldId) : undefined
     return (
-      <li class={`cv-row cv-row-${p.status} ${row.decision === 'reject' ? 'cv-row-rejected' : ''}`}>
+      <li class={`cv-row cv-row-${p.status} ${row.decision === 'reject' ? 'cv-row-rejected' : ''} ${row.id === activeId ? 'cv-row-active' : ''}`} onClick={() => setActiveId(row.id)}>
         <div class="cv-row-main">
           <span class="cv-row-line">{t('common.line', { n: p.line + 1 })}</span>
           <code class="cv-row-literal">{literalOf(row)}</code>
@@ -291,7 +296,7 @@ export function PasteSheet(props: {
   const UnknownRow = ({ row }: { row: ReviewRow }) => {
     const u = row.unknown!
     return (
-      <li class={`cv-row cv-row-unknown ${row.decision !== 'pending' ? 'cv-row-decided' : ''}`}>
+      <li class={`cv-row cv-row-unknown ${row.decision !== 'pending' ? 'cv-row-decided' : ''} ${row.id === activeId ? 'cv-row-active' : ''}`} onClick={() => setActiveId(row.id)}>
         <div class="cv-row-main">
           <span class="cv-row-line">{t('common.line', { n: u.line + 1 })}</span>
           <code class="cv-row-literal">{literalOf(row)}</code>
@@ -351,6 +356,14 @@ export function PasteSheet(props: {
       </li>
     )
   }
+
+  // From rows, never from result: trimPathRow shrinks a proposal when a row is
+  // linked to a path field, and the highlight has to shrink with it.
+  const findings = useMemo(() => findingsOf(rows, isSecretRow, text.length), [rows, text])
+  const goToFinding = (delta: 1 | -1) => setActiveId(stepFinding(findings, activeId, delta))
+  const inReview = step === 'review'
+  useShortcut('alt+arrowdown', () => goToFinding(1), inReview && findings.length > 0)
+  useShortcut('alt+arrowup', () => goToFinding(-1), inReview && findings.length > 0)
 
   const rowForForm = fieldFormFor ? rows.find((r) => r.id === fieldFormFor) : undefined
   const rowForLink = linkFor ? rows.find((r) => r.id === linkFor) : undefined
@@ -460,6 +473,36 @@ export function PasteSheet(props: {
             )}
           </div>
 
+          <div class="cv-review-split">
+            <div class="cv-review-codepane">
+              <div class="cv-review-nav">
+                <strong>{t('paste.codePane')}</strong>
+                {findings.length === 0 ? (
+                  <span class="cv-muted cv-small">{t('paste.noFindings')}</span>
+                ) : (
+                  <>
+                    <button type="button" class="cv-btn cv-btn-small" onClick={() => goToFinding(-1)} title="Alt+Upp">
+                      ◀ {t('paste.prevFinding')}
+                    </button>
+                    <span class="cv-muted cv-small">{t('paste.findingCounter', { i: findingIndex(findings, activeId), n: findings.length })}</span>
+                    <button type="button" class="cv-btn cv-btn-small" onClick={() => goToFinding(1)} title="Alt+Ner">
+                      {t('paste.nextFinding')} ▶
+                    </button>
+                  </>
+                )}
+              </div>
+              <FindingsCode
+                text={text}
+                marks={findings}
+                activeId={activeId}
+                language={language}
+                onSelect={setActiveId}
+                onCopyBlocked={() => toast(t('paste.codeCopyBlocked'), 'warn')}
+              />
+              {findings.some((f) => f.masked) && <p class="cv-hint">{t('paste.codeMasked')}</p>}
+            </div>
+
+            <div class="cv-review-list">
           {groups.unknown.length > 0 && (
             <section class="cv-group cv-group-unknown">
               <h4>{t('paste.groupUnknown', { n: groups.unknown.length })}</h4>
@@ -490,6 +533,8 @@ export function PasteSheet(props: {
             </summary>
             <ul class="cv-list">{groups.auto.map((r) => <SlotRow key={r.id} row={r} />)}</ul>
           </details>
+            </div>
+          </div>
 
           <label class="cv-label">
             {t('paste.note')}

@@ -150,6 +150,13 @@ export const sv = {
   'paste.needsReview': 'Versionen sparas med "behöver granskning": {n} olösta rader. "Kopiera riktigt" är blockerat tills de är lösta.',
   'paste.noText': 'Klistra in något först.',
   'paste.note': 'Anteckning (valfri)',
+  'paste.codePane': 'Koden',
+  'paste.prevFinding': 'Föregående fynd',
+  'paste.nextFinding': 'Nästa fynd',
+  'paste.findingCounter': 'Fynd {i}/{n}',
+  'paste.noFindings': 'Inga fynd att stega mellan.',
+  'paste.codeMasked': 'Hemliga värden är maskerade i koden och finns inte i den. Använd Visa på raden i listan för att se ett värde.',
+  'paste.codeCopyBlocked': 'Kopiering från granskningsvyn är avstängd. Texten är din egen inklistring.',
   'paste.markBlob': 'Markera hela blocket som ett fält',
   'paste.blobColumns': 'kolumner: {cols}',
 

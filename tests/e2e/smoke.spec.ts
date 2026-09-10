@@ -43,6 +43,29 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   const unknownRows = page.locator('.cv-group-unknown .cv-row')
   await expect(unknownRows).toHaveCount(3)
 
+  // the code is shown beside the list, every finding marked — the three unknown
+  // values plus the path the detector picked up as a candidate
+  const codePane = page.locator('.cv-review-code')
+  await expect(codePane).toBeVisible()
+  await expect(page.locator('.cv-find')).toHaveCount(4)
+  // The password is not merely hidden: it is not in the document at all.
+  await expect(codePane).not.toContainText(REAL_PW)
+  await expect(codePane).toContainText('••')
+  // Identifying values stay readable, so you can match them against the code.
+  await expect(codePane).toContainText(REAL_SERVER)
+  await expect(codePane).toContainText('svc-adsync')
+
+  // stepping moves the active mark; clicking a mark selects its row
+  await expect(page.locator('.cv-find-active')).toHaveCount(0)
+  await page.getByRole('button', { name: /Nästa fynd/ }).click()
+  await expect(page.locator('.cv-find-active')).toHaveCount(1)
+  await expect(page.locator('.cv-review-nav')).toContainText('Fynd 1/4')
+  await page.getByRole('button', { name: /Nästa fynd/ }).click()
+  await expect(page.locator('.cv-review-nav')).toContainText('Fynd 2/4')
+  await expect(page.locator('.cv-row-active')).toHaveCount(1)
+  await page.locator('.cv-find').first().click()
+  await expect(page.locator('.cv-review-nav')).toContainText('Fynd 1/4')
+
   // register the username
   const userRow = unknownRows.filter({ hasText: 'rad 2' })
   await userRow.getByRole('button', { name: 'Skapa fält' }).click()

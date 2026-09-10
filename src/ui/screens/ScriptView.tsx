@@ -42,16 +42,27 @@ export function ScriptView(props: { scriptId: string; versionId?: string }) {
   useShortcut('ctrl+shift+n', () => setNewVersion('ai'), !newVersion)
   useShortcut('ctrl+shift+m', () => startMark(), !newVersion)
   useShortcut('ctrl+shift+d', () => openDiff(), !newVersion && versions.length > 1)
-  useShortcut('alt+arrowup', () => {
-    if (!version) return
-    const i = versions.findIndex((v) => v.id === version.id)
-    if (i < versions.length - 1) select(versions[i + 1]!.id)
-  })
-  useShortcut('alt+arrowdown', () => {
-    if (!version) return
-    const i = versions.findIndex((v) => v.id === version.id)
-    if (i > 0) select(versions[i - 1]!.id)
-  })
+  // Guarded like the shortcuts above: useShortcut listens on window with no
+  // capture, so an unguarded binding also fires while the paste sheet is open —
+  // where the same keys step between findings.
+  useShortcut(
+    'alt+arrowup',
+    () => {
+      if (!version) return
+      const i = versions.findIndex((v) => v.id === version.id)
+      if (i < versions.length - 1) select(versions[i + 1]!.id)
+    },
+    !newVersion,
+  )
+  useShortcut(
+    'alt+arrowdown',
+    () => {
+      if (!version) return
+      const i = versions.findIndex((v) => v.id === version.id)
+      if (i > 0) select(versions[i - 1]!.id)
+    },
+    !newVersion,
+  )
 
   if (!script || !version) {
     navigate({ view: 'scripts' })
@@ -200,7 +211,7 @@ export function ScriptView(props: { scriptId: string; versionId?: string }) {
       )}
 
       {newVersion && (
-        <Modal title={t('paste.title')} onClose={() => setNewVersion(null)} wide>
+        <Modal title={t('paste.title')} onClose={() => setNewVersion(null)} xwide>
           <PasteSheet
             scriptId={script.id}
             initialMode={newVersion}

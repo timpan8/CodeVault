@@ -68,7 +68,7 @@ Sidan **Om** i appen kör motorns fixture-svit i webbläsaren (självtest) och v
 ## Arbetsflöde
 
 1. Första start: **Kom igång direkt**, eller sätt ett master-lösenord med en gång. Väljer du lösenord får du en återställningsnyckel att spara.
-2. **Importera från min editor** eller **Ny version från AI**: klistra in, granska kandidaterna (auto, bekräfta, nya, saknas, okända), spara.
+2. **Importera från min editor** eller **Ny version från AI**: klistra in, granska kandidaterna (auto, bekräfta, nya, saknas, okända) med koden bredvid — varje fynd är färgat och `Alt+Upp`/`Alt+Ner` stegar mellan dem — och spara.
 3. **Kopiera för AI** ger den sanerade renderingen, alltid genom läckvakten. **Kopiera riktigt** kräver två tryck och visar en checklista först.
 4. Nästa version från AI:n: klistra in, fälten återappliceras, granska det som inte var exakt.
 5. **Diff** jämför två versioner på mallnivå: fält är atomära markörer, ändrade exempelvärden ger ingen hunk.
