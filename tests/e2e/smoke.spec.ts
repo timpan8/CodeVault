@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test'
 const PASSWORD = 'correct-horse-battery'
 const REAL_PW = 'Sommar2024!'
 const REAL_SERVER = 'dc01.corp.contoso.se'
+/** Outside the reserved namespace on purpose: the guard must still let it out. */
+const CHOSEN_EXAMPLE = 'web-frontend.acme-demo.net'
 
 const EDITOR_PASTE = [
   '# Sync users to the lab',
@@ -58,10 +60,17 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   await form.getByRole('button', { name: 'Skapa fält' }).click()
   await expect(pwRow.locator('.cv-chip-accept')).toBeVisible()
 
-  // register the server as a field too
+  // register the server as a field too, and choose its example value by hand
   const srvRow = unknownRows.filter({ hasText: 'rad 4' })
   await srvRow.getByRole('button', { name: 'Skapa fält' }).click()
   await form.locator('input.cv-input').first().fill('DC')
+  const exampleInput = form.getByLabel('Exempelvärde (det AI:n ser)')
+  await expect(exampleInput).toHaveValue('SRV-EXAMPLE01.corp.example')
+  // The vault's own real value can never become what the AI sees.
+  await exampleInput.fill(REAL_SERVER)
+  await expect(form.getByRole('button', { name: 'Skapa fält' })).toBeDisabled()
+  await exampleInput.fill(CHOSEN_EXAMPLE)
+  await expect(form.getByRole('button', { name: 'Skapa fält' })).toBeEnabled()
   await form.getByRole('button', { name: 'Skapa fält' }).click()
   await expect(srvRow.locator('.cv-chip-accept')).toBeVisible()
 
@@ -81,7 +90,8 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   await page.getByRole('button', { name: /Kopiera för AI/ }).click()
   await expect.poll(() => readClipboard(page)).toContain('Ex@mple-Passw0rd-1')
   const aiCopy = await readClipboard(page)
-  expect(aiCopy).toContain('SRV-EXAMPLE01.corp.example')
+  // A chosen example leaves through the leak guard like any other fake.
+  expect(aiCopy).toContain(CHOSEN_EXAMPLE)
   expect(aiCopy).toContain('svc-example01')
   expect(aiCopy).not.toContain('svc-adsync')
   expect(aiCopy).not.toContain(REAL_PW)

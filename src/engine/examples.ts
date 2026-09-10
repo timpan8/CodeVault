@@ -113,18 +113,26 @@ export function generateExample(
   }
 }
 
-/** Smallest n >= 1 whose generated example is not already used by another field. */
+/**
+ * Smallest n >= 1 whose generated example is free. `accept` lets the caller add
+ * the full example rules on top of plain uniqueness, so the value a form shows
+ * is the value the vault will accept — they used to be generated separately and
+ * could differ.
+ */
 export function nextExample(
   kind: FieldKind,
   fields: Iterable<Pick<Field, 'example'>>,
   ns: ExampleNamespace = DEFAULT_NAMESPACE,
   opts: GenerateOptions = {},
+  accept?: (candidate: string) => boolean,
 ): string {
   const used = new Set<string>()
   for (const f of fields) used.add(f.example.toLowerCase())
   for (let n = 1; n < 10_000; n++) {
     const candidate = generateExample(kind, n, ns, opts)
-    if (!used.has(candidate.toLowerCase())) return candidate
+    if (used.has(candidate.toLowerCase())) continue
+    if (accept && !accept(candidate)) continue
+    return candidate
   }
   throw new Error('example namespace exhausted')
 }

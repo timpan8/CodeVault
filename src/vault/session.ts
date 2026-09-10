@@ -9,7 +9,7 @@ import { contentHash as hashSegments, escapeValue } from '@engine/template'
 import {
   ALTERNATE_NAMESPACES,
   DEFAULT_NAMESPACE,
-  generateExample,
+  nextExample,
   realValueCollidesWithNamespace,
   type ExampleNamespace,
 } from '@engine/examples'
@@ -82,6 +82,12 @@ export interface UpdateFieldInput {
   sensitivity?: Field['sensitivity']
   scope?: Field['scope']
   real?: string
+  /**
+   * A new example value. The old one is kept as an alias, so code the AI has
+   * already written keeps matching. Cheap because templates store the field id,
+   * never the text: every stored version follows along at render time.
+   */
+  example?: string
   aliases?: Field['aliases']
   nameAnchors?: string[]
   template?: string
@@ -539,6 +545,22 @@ export class VaultSession {
     })
   }
 
+  /**
+   * What is wrong with `example` for a field of `kind`, if anything.
+   *
+   * `exceptId` skips that field's own example — it is the one being replaced —
+   * but never any real value: an example that equals a real value would hand
+   * that value straight to the AI. `pendingReal` is the real value of a field
+   * being created or changed right now, which is not in the vault yet and would
+   * otherwise be the one real value nobody checks against.
+   */
+  validateExampleFor(example: string, kind: Field['kind'], opts: { exceptId?: string; pendingReal?: string } = {}): ExampleProblem[] {
+    this.key()
+    const realValues = this.allRealValues()
+    if (opts.pendingReal) realValues.push(opts.pendingReal)
+    return validateExample(example, { kind, otherExamples: this.otherExamples(opts.exceptId), realValues })
+  }
+
   private otherExamples(exceptId?: string): string[] {
     return [...this.fields.values()].filter((f) => f.id !== exceptId).map((f) => f.example)
   }
@@ -574,25 +596,21 @@ export class VaultSession {
     this.key()
     const ns = await this.ensureNamespaceFor(input.real)
     let example = input.example
-    const validation = (ex: string) =>
-      validateExample(ex, { kind: input.kind, otherExamples: this.otherExamples(), realValues: this.allRealValues() })
+    const validation = (ex: string) => this.validateExampleFor(ex, input.kind, input.real ? { pendingReal: input.real } : {})
     if (example !== undefined) {
       const problems = validation(example)
       if (problems.length) throw new ExampleInvalidError(problems)
     } else {
-      const used = new Set(this.otherExamples().map((e) => e.toLowerCase()))
-      for (let n = 1; n < 10_000; n++) {
-        const candidate = generateExample(input.kind, n, ns, {
+      example = nextExample(
+        input.kind,
+        [...this.fields.values()],
+        ns,
+        {
           ...(input.real ? { shapeOf: input.real } : {}),
           ...(input.aiVisibleName ? { aiVisibleName: input.aiVisibleName } : {}),
-        })
-        if (used.has(candidate.toLowerCase())) continue
-        if (validation(candidate).length === 0) {
-          example = candidate
-          break
-        }
-      }
-      if (example === undefined) throw new Error('Could not generate a unique example value')
+        },
+        (c) => validation(c).length === 0,
+      )
     }
     const base = engineCreateField({
       id: randomId(),
@@ -625,6 +643,22 @@ export class VaultSession {
     if (patch.aliases !== undefined) next.aliases = patch.aliases
     if (patch.nameAnchors !== undefined) next.nameAnchors = patch.nameAnchors.map(normalizeAnchorName)
     if (patch.template !== undefined) next.template = patch.template
+    if (patch.example !== undefined && patch.example !== cur.example) {
+      const problems = this.validateExampleFor(patch.example, patch.kind ?? cur.kind, {
+        exceptId: id,
+        ...(patch.real !== undefined ? { pendingReal: patch.real } : {}),
+      })
+      if (problems.length) throw new ExampleInvalidError(problems)
+      // The AI has seen the old value and will keep writing it. Keeping it as an
+      // alias is what makes the change safe to make at all.
+      const old = cur.example
+      const aliases = patch.aliases ?? cur.aliases
+      next.aliases =
+        old && !aliases.some((a) => a.value.toLowerCase() === old.toLowerCase())
+          ? [...aliases, { value: old, anchorOnly: false }]
+          : aliases
+      next.example = patch.example
+    }
     if (patch.exposedAt === null) delete next.exposedAt
     else if (patch.exposedAt !== undefined) next.exposedAt = patch.exposedAt
     if (patch.real !== undefined && patch.real !== cur.valueByProfile['default']) {

@@ -229,6 +229,9 @@ export function ScriptView(props: { scriptId: string; versionId?: string }) {
             initial={{
               kind: (info.bindingName ? kindFromBindingName(info.bindingName) : undefined) ?? 'custom',
               ...(info.bindingName ? { bindingName: info.bindingName } : {}),
+              // The editor document is the example rendering, so the selected
+              // text is already a fake and can stand as this field's example.
+              ...(info.logical.length >= 6 ? { exampleFromCode: info.logical } : {}),
             }}
             onDone={(f) => void applyMark(f)}
             onLink={(f) => void applyMark(f)}

@@ -200,6 +200,12 @@ export function PasteSheet(props: {
     return kindMasksByDefault(row.proposal?.kindGuess ?? row.unknown?.kindGuess)
   }
 
+  /** The literal the AI wrote here, when it could stand as an example value. */
+  const exampleFromCode = (row: ReviewRow): string | undefined => {
+    const lit = row.proposal?.literal ?? row.unknown?.literal
+    return lit && lit.length >= 6 ? lit : undefined
+  }
+
   const literalOf = (row: ReviewRow): string => {
     const lit = row.proposal?.literal ?? row.unknown?.literal ?? ''
     const short = lit.length > 70 ? lit.slice(0, 70) + '…' : lit
@@ -513,6 +519,9 @@ export function PasteSheet(props: {
               real: mode === 'editor' || rowForForm.kind === 'unknown' ? (blobRaw ?? rowForForm.proposal?.literal ?? rowForForm.unknown?.literal ?? '') : '',
               ...(rowForForm.proposal?.bindingName ? { bindingName: rowForForm.proposal.bindingName } : {}),
               ...(blobRaw !== undefined ? { blobRaw } : {}),
+              // In AI mode the literal is what the AI itself wrote, so it can
+              // carry on as the example value instead of being replaced.
+              ...(mode === 'ai' && exampleFromCode(rowForForm) ? { exampleFromCode: exampleFromCode(rowForForm)! } : {}),
             }}
             onDone={(f) => {
               resolveRow(rowForForm.id, f)
