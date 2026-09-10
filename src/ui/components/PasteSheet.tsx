@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks'
 import type { NormalizedPaste } from '@engine/normalize'
 import { learnFromAccepted, lineFingerprint, type MissingField, type ReapplyResult, type SlotProposal } from '@engine/reapply'
 import { contentHash } from '@engine/template'
-import type { FieldKind } from '@engine/types'
+import { kindMasksByDefault, masksByDefault } from '@engine/fields'
 import type { FieldRecord } from '@vault/model'
 import { engine, getSession, toast, useTick } from '../state'
 import { buildVersion, groupRows, initialRows, trimPathRow, type ReviewRow } from '../review'
@@ -14,8 +14,6 @@ import { t, type StringKey } from '@i18n/index'
 
 type Step = 'paste' | 'blocks' | 'review'
 type Mode = 'ai' | 'editor'
-
-const SECRET_KINDS = new Set<FieldKind>(['password', 'apiKey', 'blob'])
 
 export function PasteSheet(props: {
   scriptId?: string
@@ -198,9 +196,8 @@ export function PasteSheet(props: {
 
   const isSecretRow = (row: ReviewRow): boolean => {
     const field = row.fieldId ? session.getField(row.fieldId) : undefined
-    if (field) return SECRET_KINDS.has(field.kind)
-    const guess = row.proposal?.kindGuess ?? row.unknown?.kindGuess
-    return guess !== undefined && SECRET_KINDS.has(guess)
+    if (field) return masksByDefault(field)
+    return kindMasksByDefault(row.proposal?.kindGuess ?? row.unknown?.kindGuess)
   }
 
   const literalOf = (row: ReviewRow): string => {

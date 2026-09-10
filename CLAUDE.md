@@ -63,6 +63,9 @@ Decisions, not accidents. Several are enforced by tests.
    the version history, error messages or issue objects.
 7. **Same-origin CSP in `index.html`.** No CDN, no web fonts, no telemetry, no network calls.
 8. **Inputs are `type=text`** with manual masking and `autocomplete=off`, never `type=password`.
+   Masking follows sensitivity, not the widget: `masksByDefault()` in `src/engine/fields.ts` is the
+   only rule, and only `sensitivity === 'secret'` is hidden by default. Identifying values — server
+   names, domains, paths — are shown, because you cannot check them against the code as dots.
 9. **Only `dist/` is published.** Never user data, never a backup file.
 10. **Records are encrypted in both protection modes.** What changes is where the DEK lives, never
     whether it is used — there is no plaintext storage path to keep in step. A backup of an

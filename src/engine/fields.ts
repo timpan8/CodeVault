@@ -50,6 +50,22 @@ export function defaultSensitivity(kind: FieldKind, realValue?: string): Sensiti
   }
 }
 
+/**
+ * The one rule for "hidden until asked for". Keyed on sensitivity, not kind:
+ * a field carries its own classification, and render() already decides its
+ * secret-interpolating issue the same way. Everything else — a server name, a
+ * path, a user name — is shown, because you cannot work with code you cannot
+ * read.
+ */
+export function masksByDefault(field: Pick<Field, 'sensitivity'> | undefined): boolean {
+  return field?.sensitivity === 'secret'
+}
+
+/** Same rule for a value that has no field yet, only a guessed kind. */
+export function kindMasksByDefault(kind: FieldKind | undefined): boolean {
+  return kind !== undefined && defaultSensitivity(kind) === 'secret'
+}
+
 /** Local paths are public unless they carry a UNC host or a user-profile segment. */
 export function pathSensitivity(realValue: string): Sensitivity {
   if (realValue.startsWith('\\\\')) return 'internal'

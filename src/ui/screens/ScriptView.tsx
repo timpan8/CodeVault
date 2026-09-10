@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'preact/hooks'
 import { guard } from '@engine/guard'
 import { kindFromBindingName } from '@engine/detectors'
+import { masksByDefault } from '@engine/fields'
 import type { FieldRecord } from '@vault/model'
 import { getSession, navigate, toast, useTick } from '../state'
 import { insertSlot, layoutSegments, removeSlot, selectionInfo, type SlotLayout } from '../layout'
@@ -255,17 +256,25 @@ export function ScriptView(props: { scriptId: string; versionId?: string }) {
           <p>
             <span class="cv-chip">{pillField ? kindLabel(pillField.kind) : '?'}</span> <code>{pillField?.example}</code> · {t('common.line', { n: layout.text.slice(0, pill.from).split('\n').length })}
           </p>
-          <div class="cv-field-real" onContextMenu={(e) => e.preventDefault()}>
-            {pillReal === undefined ? (
+          {pillReal === undefined ? (
+            <div class="cv-field-real">
               <span class="cv-warn">{t('field.noReal')}</span>
-            ) : reveal ? (
-              <Reveal value={pillReal} onDone={() => setReveal(false)} />
-            ) : (
-              <button type="button" class="cv-btn cv-btn-small" onClick={() => setReveal(true)}>
-                {t('field.reveal')}
-              </button>
-            )}
-          </div>
+            </div>
+          ) : !masksByDefault(pillField) ? (
+            <div class="cv-field-real">
+              <code class="cv-field-realvalue">{pillReal}</code>
+            </div>
+          ) : (
+            <div class="cv-field-real" onContextMenu={(e) => e.preventDefault()}>
+              {reveal ? (
+                <Reveal value={pillReal} onDone={() => setReveal(false)} />
+              ) : (
+                <button type="button" class="cv-btn cv-btn-small" onClick={() => setReveal(true)}>
+                  {t('field.reveal')}
+                </button>
+              )}
+            </div>
+          )}
           <div class="cv-actions">
             <button type="button" class="cv-btn cv-btn-ghost" onClick={() => void unmarkPill(pill)}>
               {t('script.unmarkPill')}

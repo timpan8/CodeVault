@@ -2,7 +2,7 @@ import { useMemo, useState } from 'preact/hooks'
 import { FIELD_KINDS, type Field, type FieldKind } from '@engine/types'
 import { generateExample } from '@engine/examples'
 import { buildBlobExample } from '@engine/blob'
-import { matchRuleFor, suggestFieldName } from '@engine/fields'
+import { kindMasksByDefault, matchRuleFor, suggestFieldName } from '@engine/fields'
 import { directoryPart } from '../review'
 import type { FieldRecord } from '@vault/model'
 import { ExampleInvalidError } from '@vault/session'
@@ -133,7 +133,7 @@ export function FieldForm(props: {
       {kind !== 'blob' ? (
         <label class="cv-label">
           {t('field.real')} {props.requireReal ? '*' : ''}
-          <SecretInput value={real} onInput={setReal} ariaLabel={t('field.real')} />
+          <SecretInput value={real} onInput={setReal} ariaLabel={t('field.real')} masked={kindMasksByDefault(kind)} />
           <span class="cv-hint">{t('field.realHint')}</span>
           {tooShort && <span class="cv-hint cv-warn">{t('field.tooShort')}</span>}
         </label>

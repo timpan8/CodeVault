@@ -70,6 +70,14 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   // --- script view: pills for both fields, sanitized copy
   await expect(page.locator('.cv-editor')).toBeVisible()
   await expect(page.locator('.cv-pill')).toHaveCount(3)
+
+  // identifying values are readable, secrets are not
+  const dcField = page.locator('.cv-field', { hasText: 'DC' })
+  await expect(dcField).toContainText(REAL_SERVER)
+  await expect(dcField.getByRole('button', { name: 'Visa i 10 s' })).toHaveCount(0)
+  const pwField = page.locator('.cv-field', { hasText: 'SVC_PW' })
+  await expect(pwField).not.toContainText(REAL_PW)
+  await expect(pwField.getByRole('button', { name: 'Visa i 10 s' })).toBeVisible()
   await page.getByRole('button', { name: /Kopiera för AI/ }).click()
   await expect.poll(() => readClipboard(page)).toContain('Ex@mple-Passw0rd-1')
   const aiCopy = await readClipboard(page)

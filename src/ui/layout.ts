@@ -4,6 +4,7 @@
  * offsets computed here; every slot maps to one pill.
  */
 import { lex, unescapeDq, unescapeHsDq, unescapeSq, type Token } from '@engine/lexer/powershell'
+import { masksByDefault } from '@engine/fields'
 import { escapeValue, SLOT_CLOSE, SLOT_OPEN } from '@engine/template'
 import type { Field, QuoteKind, Segment, SlotStatus } from '@engine/types'
 
@@ -194,7 +195,7 @@ export function unresolvedSecretSlots(segments: readonly Segment[], fields: Read
   for (const seg of segments) {
     if (seg.t !== 'slot') continue
     const f = fields.get(seg.fieldId)
-    if (seg.status === 'confirm' && f && (f.kind === 'password' || f.kind === 'apiKey' || f.kind === 'blob')) n++
+    if (seg.status === 'confirm' && masksByDefault(f)) n++
   }
   return n
 }
