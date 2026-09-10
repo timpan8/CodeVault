@@ -175,8 +175,19 @@ a { color: var(--cv-accent); }
 .cv-group summary h4 { display: inline; }
 .cv-review-summary { display: flex; gap: 1rem; align-items: center; font-weight: 600; margin: 0.5rem 0; flex-wrap: wrap; }
 
+.cv-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--cv-border); margin-top: 0.5rem; }
+.cv-tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; color: var(--cv-muted);
+  font: inherit; padding: 0.4rem 0.7rem; cursor: pointer;
+}
+.cv-tab:hover { color: inherit; }
+.cv-tab-active { color: inherit; font-weight: 600; border-bottom-color: var(--cv-accent); }
+.cv-review-diff { margin-top: 0.6rem; }
+
 /* One column by default, two only where there is room for them. */
 .cv-review-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; align-items: start; }
+/* display:grid would win over the UA rule for [hidden]. */
+.cv-review-split[hidden] { display: none; }
 .cv-modal-xwide .cv-review-split { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
 @media (max-width: 1180px) { .cv-modal-xwide .cv-review-split { grid-template-columns: minmax(0, 1fr); } }
 .cv-review-codepane { position: sticky; top: 0; min-width: 0; }

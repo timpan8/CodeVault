@@ -153,6 +153,18 @@ test('core loop: open vault, import from editor, copy both ways, new version, ad
   await expect(modal.locator('.cv-group-auto')).toBeVisible()
   await expect(modal.locator('.cv-group-auto .cv-row')).toHaveCount(3)
   await expect(modal.locator('.cv-group-unknown')).toHaveCount(0)
+
+  // the changes tab: what this version does to v1, before it is saved
+  await expect(modal.locator('.cv-review-summary .cv-chip', { hasText: /\+\d+ −\d+/ })).toBeVisible()
+  await modal.getByRole('tab', { name: /Ändringar mot v1/ }).click()
+  await expect(modal.locator('.cv-review-diff .cm-content').first()).toBeVisible()
+  await expect(modal.locator('.cv-review-diff')).toContainText('⟦SVC_PW⟧')
+  await expect(modal.locator('.cv-review-diff')).not.toContainText(REAL_PW)
+  // Deliberately not offered here: unresolved secrets live in this very step.
+  await expect(modal.getByRole('button', { name: /Visa riktiga värden/ })).toHaveCount(0)
+  await modal.getByRole('tab', { name: 'Fynd' }).click()
+  await expect(modal.locator('.cv-review-code')).toBeVisible()
+
   await modal.getByRole('button', { name: 'Spara version' }).click()
   await expect(page.locator('.cv-version')).toHaveCount(2)
   await expect(page.locator('.cv-version-selected')).toContainText('v2')

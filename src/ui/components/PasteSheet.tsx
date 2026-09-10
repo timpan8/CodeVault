@@ -10,12 +10,16 @@ import { findingIndex, findingsOf, stepFinding } from '../findings'
 import { FindingsCode } from './FindingsCode'
 import { useShortcut } from '../keys'
 import { diffDoc, diffStats, formatStats } from '../diff'
+import { ReviewDiff } from './ReviewDiff'
 import { kindLabel, mask, suggestTitle } from '../format'
 import { FieldForm } from './FieldForm'
 import { Modal } from './Modal'
 import { t, type StringKey } from '@i18n/index'
 
 type Step = 'paste' | 'blocks' | 'review'
+
+/** The preview build's timestamps are discarded; only its segments are used. */
+const PREVIEW_NOW = '1970-01-01T00:00:00.000Z'
 type Mode = 'ai' | 'editor'
 
 export function PasteSheet(props: {
@@ -24,7 +28,7 @@ export function PasteSheet(props: {
   onDone: (scriptId: string, versionId: string) => void
   onCancel: () => void
 }) {
-  useTick()
+  const tick = useTick()
   const session = getSession()
   const script = props.scriptId ? session.getScript(props.scriptId) : undefined
   const [raw, setRaw] = useState('')
@@ -47,6 +51,7 @@ export function PasteSheet(props: {
   const [duplicateOf, setDuplicateOf] = useState<number | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [tab, setTab] = useState<'findings' | 'changes'>('findings')
 
   const updateRow = (id: string, patch: Partial<ReviewRow>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
   /** Resolve a row to a field; path fields cover the directory prefix only. */
@@ -123,6 +128,7 @@ export function PasteSheet(props: {
     setResult(res)
     setRows(initialRows(res))
     setActiveId(null)
+    setTab('findings')
     setMissingAck(new Set())
     setMode(m)
     if (!props.scriptId && !title) setTitle(suggestTitle(body))
@@ -360,6 +366,20 @@ export function PasteSheet(props: {
   // From rows, never from result: trimPathRow shrinks a proposal when a row is
   // linked to a path field, and the highlight has to shrink with it.
   const findings = useMemo(() => findingsOf(rows, isSecretRow, text.length), [rows, text])
+
+  // fieldMap() hands back a fresh Map every call, so it has to be memoised or
+  // every memo below it recomputes on each keystroke in the note field.
+  const fieldMap = useMemo(() => session.fieldMap(), [tick])
+  const prevVersion = props.scriptId ? session.latestVersion(props.scriptId) : undefined
+  const prevDoc = useMemo(() => (prevVersion ? diffDoc(prevVersion.segments, fieldMap) : ''), [prevVersion, fieldMap])
+  const nextDoc = useMemo(() => {
+    if (!result) return ''
+    // Only the segments are wanted; save() builds its own with a real timestamp,
+    // because this build's reviewLog entries would carry a frozen one.
+    const built = buildVersion(text, rows, result.missing, missingAck, fieldMap, PREVIEW_NOW)
+    return diffDoc(built.segments, fieldMap)
+  }, [text, rows, result, missingAck, fieldMap])
+  const pendingStats = useMemo(() => (prevVersion ? diffStats(prevDoc, nextDoc) : null), [prevDoc, nextDoc, prevVersion])
   const goToFinding = (delta: 1 | -1) => setActiveId(stepFinding(findings, activeId, delta))
   const inReview = step === 'review'
   useShortcut('alt+arrowdown', () => goToFinding(1), inReview && findings.length > 0)
@@ -464,8 +484,19 @@ export function PasteSheet(props: {
               </div>
             </div>
           )}
+          {prevVersion && (
+            <div class="cv-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected={tab === 'findings'} class={`cv-tab ${tab === 'findings' ? 'cv-tab-active' : ''}`} onClick={() => setTab('findings')}>
+                {t('paste.tabFindings')}
+              </button>
+              <button type="button" role="tab" aria-selected={tab === 'changes'} class={`cv-tab ${tab === 'changes' ? 'cv-tab-active' : ''}`} onClick={() => setTab('changes')}>
+                {t('paste.tabDiff', { seq: prevVersion.seq })}
+              </button>
+            </div>
+          )}
           <div class="cv-review-summary">
             {t('paste.summary', { auto: groups.auto.length, confirm: groups.confirm.length, candidate: groups.candidate.length, missing: result.missing.length, unknown: groups.unknown.length })}
+            {pendingStats && <span class="cv-chip">{t('diff.stats', { added: pendingStats.added, removed: pendingStats.removed })}</span>}
             {groups.confirm.some((r) => r.decision === 'pending' && r.fieldId) && (
               <button type="button" class="cv-btn cv-btn-small" onClick={() => setRows((rs) => rs.map((r) => (r.kind === 'slot' && r.proposal!.status === 'auto' ? { ...r, decision: 'accept' } : r)))}>
                 {t('paste.acceptAllGreen')}
@@ -473,7 +504,9 @@ export function PasteSheet(props: {
             )}
           </div>
 
-          <div class="cv-review-split">
+          {tab === 'changes' && prevVersion && <ReviewDiff prevDoc={prevDoc} nextDoc={nextDoc} prevSeq={prevVersion.seq} />}
+
+          <div class="cv-review-split" hidden={tab === 'changes'}>
             <div class="cv-review-codepane">
               <div class="cv-review-nav">
                 <strong>{t('paste.codePane')}</strong>
@@ -538,7 +571,13 @@ export function PasteSheet(props: {
 
           <label class="cv-label">
             {t('paste.note')}
-            <input class="cv-input" value={note} onInput={(e) => setNote((e.currentTarget as HTMLInputElement).value)} spellcheck={false} />
+            <input
+              class="cv-input"
+              value={note}
+              onInput={(e) => setNote((e.currentTarget as HTMLInputElement).value)}
+              placeholder={pendingStats ? formatStats(pendingStats) : ''}
+              spellcheck={false}
+            />
           </label>
           <div class="cv-actions">
             <button type="button" class="cv-btn cv-btn-primary" onClick={() => void save()} disabled={busy}>

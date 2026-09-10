@@ -87,8 +87,9 @@ src/vault/    crypto.ts (two protection modes, one DEK) · store.ts (Dexie) · l
               session.ts (state machine: create/createUnprotected, addPassword/removePassword)
               backup.ts (rotating encrypted backup + structure export) · merge.ts (cross-machine import)
 src/ui/       Preact: screens/ (Setup, Unlock, Scripts, ScriptView, Sanitize, Values, Settings, About)
-              components/ (Editor, FindingsCode, PasteSheet, DiffView, FieldsPanel, FieldForm, Exits,
-              GuardFindings) · findings.ts (review spans + redaction, pure) · review.ts · layout.ts
+              components/ (Editor, FindingsCode, PasteSheet, DiffPanes, DiffView, ReviewDiff,
+              FieldsPanel, FieldForm, Exits, GuardFindings)
+              findings.ts (review spans + redaction, pure) · review.ts · layout.ts · diff.ts
               state.ts (signals, routing, toasts)
 src/i18n/     UI strings, sv default with en fallback
 tests/        Vitest fixtures + property tests; tests/e2e Playwright
